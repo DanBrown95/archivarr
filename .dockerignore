@@ -1,0 +1,14 @@
+# Keep the build context small and reproducible.
+.git
+web/node_modules
+web/dist/assets
+/config
+*.db
+*.db-wal
+*.db-shm
+*.log
+archivarr
+archivarr.exe
+/out
+tmp_smoke
+*.md

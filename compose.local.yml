@@ -1,0 +1,26 @@
+# Local development on Docker Desktop (Windows/Mac).
+#
+# Differs from docker-compose.yml (the real NAS deployment) in two ways:
+#   - plain bind mounts, no `:rslave` propagation (Docker Desktop doesn't support it)
+#   - mounts ./local/mnt as the simulated drive root and ./local/config for the DB
+#
+# Put folders under ./local/mnt to act as drives (a source media folder, and
+# empty folders to register as destinations).
+#
+# Run:   docker compose -f compose.local.yml up --build
+# Stop:  Ctrl+C   (or: docker compose -f compose.local.yml down)
+services:
+  archivarr:
+    build:
+      context: .
+    image: archivarr:local
+    container_name: archivarr-local
+    ports:
+      - "7979:7979"
+    volumes:
+      - ./local/mnt:/mnt
+      - ./local/config:/config
+    environment:
+      - ARCHIVARR_MONITOR_INTERVAL=5
+      - TZ=America/Chicago
+    restart: unless-stopped

@@ -1,0 +1,18 @@
+services:
+  archivarr:
+    build:
+      context: .
+      args:
+        VERSION: "0.1.0-dev"
+    image: archivarr:latest
+    container_name: archivarr
+    ports:
+      - "7979:7979" # Archivarr web UI + API
+    volumes:
+      - ./config:/config # sqlite db, logs, settings
+      - /mnt:/mnt:rslave # see drives the host mounts/unmounts at runtime
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Chicago
+    restart: unless-stopped

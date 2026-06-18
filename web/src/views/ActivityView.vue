@@ -1,0 +1,158 @@
+<script setup>
+import { onMounted, onUnmounted, ref } from 'vue'
+import { useMessage } from 'naive-ui'
+import { api } from '../api'
+import { formatTime } from '../util'
+
+const message = useMessage()
+const jobs = ref([])
+const selected = ref(null)
+const showDrawer = ref(false)
+
+const statusType = {
+  done: 'success',
+  failed: 'error',
+  running: 'info',
+  queued: 'default',
+  cancelled: 'warning',
+}
+
+function summary(job) {
+  const s = job.stats
+  if (!s) return ''
+  if (job.type === 'backup') {
+    let t = `copied ${s.copied}/${s.total}`
+    if (s.failed) t += `, ${s.failed} failed`
+    if (s.stoppedFull) t += ' (destination full)'
+    return t
+  }
+  if (job.type === 'scan') {
+    return `${s.new} new, ${s.changed} changed, ${s.missing} missing, ${s.hashed} hashed`
+  }
+  return ''
+}
+
+async function load() {
+  try {
+    jobs.value = (await api.jobs()) || []
+    if (selected.value) {
+      const fresh = jobs.value.find((j) => j.id === selected.value.id)
+      if (fresh) selected.value = fresh
+    }
+  } catch (e) {
+    /* transient; ignore during polling */
+  }
+}
+
+async function cancel(job) {
+  try {
+    await api.cancelJob(job.id)
+    message.info(`Cancelling job #${job.id}`)
+    load()
+  } catch (e) {
+    message.error(String(e))
+  }
+}
+
+function openDetail(job) {
+  selected.value = job
+  showDrawer.value = true
+}
+
+let timer
+onMounted(() => {
+  load()
+  timer = setInterval(load, 2000)
+})
+onUnmounted(() => clearInterval(timer))
+</script>
+
+<template>
+  <div class="page">
+    <n-space justify="space-between" align="center" style="margin-bottom: 12px">
+      <div>
+        <h1 class="page-title">Activity</h1>
+        <p class="page-subtitle" style="margin: 0">Background jobs — scans and backups.</p>
+      </div>
+      <n-button quaternary @click="load">Refresh</n-button>
+    </n-space>
+
+    <n-card>
+      <n-empty v-if="!jobs.length" description="No jobs yet." />
+      <n-table v-else :bordered="false" :single-line="false">
+        <thead>
+          <tr>
+            <th style="width: 60px">#</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th style="width: 180px">Progress</th>
+            <th>Summary</th>
+            <th>Started</th>
+            <th style="text-align: right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="j in jobs" :key="j.id">
+            <td>{{ j.id }}</td>
+            <td><n-tag size="small" :bordered="false">{{ j.type }}</n-tag></td>
+            <td><n-tag size="small" :type="statusType[j.status] || 'default'">{{ j.status }}</n-tag></td>
+            <td>
+              <n-progress
+                v-if="j.status === 'running'"
+                type="line"
+                :percentage="Math.round((j.progress || 0) * 100)"
+                :height="8"
+                processing
+              />
+              <span v-else class="muted">{{ j.status === 'done' ? '100%' : '—' }}</span>
+            </td>
+            <td class="muted">{{ summary(j) }}</td>
+            <td class="muted">{{ formatTime(j.startedAt || j.createdAt) }}</td>
+            <td>
+              <div class="row-actions">
+                <n-button size="small" tertiary @click="openDetail(j)">Log</n-button>
+                <n-button
+                  v-if="j.status === 'running' || j.status === 'queued'"
+                  size="small"
+                  type="error"
+                  ghost
+                  @click="cancel(j)"
+                >
+                  Cancel
+                </n-button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </n-table>
+    </n-card>
+
+    <n-drawer v-model:show="showDrawer" :width="520">
+      <n-drawer-content v-if="selected" :title="`Job #${selected.id} — ${selected.type}`" closable>
+        <n-space vertical>
+          <div>
+            <n-tag size="small" :type="statusType[selected.status] || 'default'">{{ selected.status }}</n-tag>
+          </div>
+          <div v-if="summary(selected)" class="muted">{{ summary(selected) }}</div>
+          <n-divider title-placement="left" style="margin: 8px 0">Log</n-divider>
+          <pre class="logbox mono">{{ selected.log || '(no output)' }}</pre>
+          <n-divider title-placement="left" style="margin: 8px 0">Stats</n-divider>
+          <pre class="logbox mono">{{ JSON.stringify(selected.stats || {}, null, 2) }}</pre>
+        </n-space>
+      </n-drawer-content>
+    </n-drawer>
+  </div>
+</template>
+
+<style scoped>
+.logbox {
+  background: #18181c;
+  border: 1px solid #2a2a30;
+  border-radius: 6px;
+  padding: 10px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+</style>

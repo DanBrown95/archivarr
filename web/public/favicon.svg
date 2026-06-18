@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="archA" x1="512" y1="220" x2="512" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5b9cf9"/>
+      <stop offset="1" stop-color="#2f6fe0"/>
+    </linearGradient>
+  </defs>
+  <!-- A chevron (no crossbar) -->
+  <path d="M300 740 L512 250 L724 740" fill="none" stroke="url(#archA)"
+        stroke-width="138" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- archive box -->
+  <rect x="368" y="558" width="288" height="54" rx="16" fill="#5d646e"/>
+  <rect x="384" y="606" width="256" height="136" rx="20" fill="#7d858f"/>
+  <rect x="460" y="578" width="104" height="20" rx="10" fill="#e6e8eb"/>
+</svg>

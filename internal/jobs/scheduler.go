@@ -51,7 +51,7 @@ func (m *Manager) maybeScheduleScans(ctx context.Context, lastScan *time.Time) {
 		}
 		params, _ := json.Marshal(ScanParams{DriveID: d.ID, HashOnScan: settings.ScanHashOnScan})
 		ps := string(params)
-		id, err := m.db.CreateJob(ctx, TypeScan, &ps)
+		id, err := m.db.CreateJob(ctx, TypeScan, &ps, db.JobOriginAuto)
 		if err != nil {
 			continue
 		}

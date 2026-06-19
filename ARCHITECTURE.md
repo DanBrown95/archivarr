@@ -121,8 +121,14 @@ requested.
 - **One writer per physical destination drive** at a time (a keyed mutex), since a
   single spinning disk hates concurrent writes.
 - A **scheduler** can enqueue scans for every source on an interval.
-- A global **pause** (timed or indefinite) holds jobs `queued` and stops the drive
-  monitor — useful for maintenance/testing.
+- Each job records an **origin** — `auto` (scheduler) or `manual` (user, via the
+  UI/API). The **pause** (timed or indefinite) suspends *automation*: `auto` jobs
+  are held `queued` until resume, while `manual` jobs run regardless — you stay in
+  control by hand. The scheduler also skips creating `auto` jobs while paused, so
+  nothing piles up. The drive monitor keeps running during pause (it's read-only
+  status, and manual backups need current drive state).
+- Queued (not-yet-started) jobs can be cancelled individually or cleared in bulk;
+  cancelling marks them `cancelled` so the worker skips them when dequeued.
 
 ## Authentication
 

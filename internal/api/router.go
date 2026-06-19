@@ -95,6 +95,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Route("/jobs", func(r chi.Router) {
 				r.Get("/", s.listJobs)
 				r.Post("/", s.createJob)
+				r.Post("/clear-queued", s.clearQueuedJobs)
 				r.Get("/{id}", s.getJob)
 				r.Delete("/{id}", s.cancelJob)
 			})

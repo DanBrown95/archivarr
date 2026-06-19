@@ -127,7 +127,8 @@ onUnmounted(() => clearInterval(timer))
           style="margin-bottom: 16px"
           title="Automation is paused"
         >
-          Scans, backups, and drive detection are paused. Queued jobs will wait until you resume.
+          Scheduled scans and backups won't run while paused. Scans and backups you start
+          manually still run, and drive detection stays active.
         </n-alert>
         <router-view />
       </n-layout-content>

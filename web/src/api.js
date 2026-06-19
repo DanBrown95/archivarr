@@ -72,6 +72,7 @@ export const api = {
   job: (id) => req('GET', `/jobs/${id}`),
   createJob: (b) => req('POST', '/jobs', b),
   cancelJob: (id) => req('DELETE', `/jobs/${id}`),
+  clearQueue: () => req('POST', '/jobs/clear-queued'),
 
   automation: () => req('GET', '/automation'),
   pause: (seconds) => req('POST', '/automation/pause', seconds ? { seconds } : {}),

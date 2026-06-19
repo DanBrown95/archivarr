@@ -81,7 +81,7 @@ internal/
   hash/            XXH3 (128-bit) content hashing, streaming + incremental
   jobs/            worker pool, scheduler, per-destination serialization, dispatch
   backup/          copy + verify engine (hash-while-copy, atomic rename, DB snapshot)
-  api/             chi router, REST handlers, embedded SPA serving
+  api/             chi router, REST handlers, auth (bcrypt + session cookie), embedded SPA serving
 web/               Vue 3 + Naive UI; built to web/dist and embedded
 migrations/        embedded *.sql schema migrations (applied at startup)
 ```
@@ -123,6 +123,32 @@ requested.
 - A **scheduler** can enqueue scans for every source on an interval.
 - A global **pause** (timed or indefinite) holds jobs `queued` and stops the drive
   monitor — useful for maintenance/testing.
+
+## Authentication
+
+The app is **locked down by default**: until an admin account exists, the API
+reports `setupRequired` and the SPA forces first-run account creation. After
+that, every `/api/*` route except `health` and the auth bootstrap
+(`auth/status`, `auth/setup`, `auth/login`) requires a valid session.
+
+The design mirrors the proven Servarr (Radarr/Sonarr) forms-auth model, with its
+known rough edges sanded off:
+
+- **Passwords**: bcrypt (cost 12) via `golang.org/x/crypto/bcrypt` — salting and
+  constant-time comparison are built in.
+- **Sessions**: server-side rows keyed by a 256-bit `crypto/rand` token, in an
+  `HttpOnly`, `SameSite=Lax` cookie (`Secure` when the request is TLS or a proxy
+  set `X-Forwarded-Proto: https`). 30-day **sliding** expiry. Being server-side,
+  sessions are *revocable* — logout deletes the row, and a credential change
+  wipes all of a user's sessions then issues a fresh one (so other devices are
+  signed out). This is the main improvement over Servarr's stateless ticket.
+- **CSRF**: `SameSite=Lax` plus the JSON-only fetch API (cross-site forms can't
+  send `application/json`), matching Servarr's posture without token machinery.
+- **Brute force**: a small in-memory per-IP failed-login throttle. Not a
+  substitute for an edge rate limiter — just a speed bump.
+
+Single-user today; the `users` table allows more rows so multi-user/roles stay a
+future option without a migration.
 
 ## Notable technical choices
 

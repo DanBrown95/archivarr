@@ -1,11 +1,60 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useMessage } from 'naive-ui'
 import { api } from '../api'
+import { useAuthStore } from '../stores/auth'
 
 const message = useMessage()
+const auth = useAuthStore()
 const loading = ref(false)
 const saving = ref(false)
+
+// --- Account (username / password) ---
+const account = ref({ username: '', currentPassword: '', newPassword: '', confirm: '' })
+const savingAccount = ref(false)
+
+onMounted(() => {
+  account.value.username = auth.username
+})
+
+const accountPwTooShort = computed(
+  () => account.value.newPassword.length > 0 && account.value.newPassword.length < 8,
+)
+const accountMismatch = computed(
+  () => account.value.confirm.length > 0 && account.value.confirm !== account.value.newPassword,
+)
+
+async function saveAccount() {
+  if (!account.value.currentPassword) {
+    message.warning('Enter your current password to confirm changes')
+    return
+  }
+  if (account.value.newPassword && account.value.newPassword.length < 8) {
+    message.warning('New password must be at least 8 characters')
+    return
+  }
+  if (account.value.newPassword && account.value.newPassword !== account.value.confirm) {
+    message.warning('New passwords do not match')
+    return
+  }
+  savingAccount.value = true
+  try {
+    const r = await api.updateAccount({
+      username: account.value.username,
+      currentPassword: account.value.currentPassword,
+      newPassword: account.value.newPassword || undefined,
+    })
+    auth.username = r.username
+    account.value.currentPassword = ''
+    account.value.newPassword = ''
+    account.value.confirm = ''
+    message.success('Account updated')
+  } catch (e) {
+    message.error(String(e).replace(/^Error:\s*/, ''))
+  } finally {
+    savingAccount.value = false
+  }
+}
 
 const form = ref({
   scanExclude: [],
@@ -49,6 +98,49 @@ async function save() {
   <div class="page" style="max-width: 760px">
     <h1 class="page-title">Settings</h1>
     <p class="page-subtitle">Control what gets tracked and how often scans run automatically.</p>
+
+    <n-card title="Account" style="margin-bottom: 16px">
+      <n-form label-placement="top" @submit.prevent="saveAccount">
+        <n-form-item label="Username">
+          <n-input v-model:value="account.username" placeholder="Username" />
+        </n-form-item>
+        <n-form-item label="Current password" required>
+          <n-input
+            v-model:value="account.currentPassword"
+            type="password"
+            show-password-on="click"
+            placeholder="Required to confirm any change"
+          />
+        </n-form-item>
+        <n-form-item
+          label="New password"
+          :validation-status="accountPwTooShort ? 'error' : undefined"
+          :feedback="accountPwTooShort ? 'At least 8 characters' : undefined"
+        >
+          <n-input
+            v-model:value="account.newPassword"
+            type="password"
+            show-password-on="click"
+            placeholder="Leave blank to keep current password"
+          />
+        </n-form-item>
+        <n-form-item
+          label="Confirm new password"
+          :validation-status="accountMismatch ? 'error' : undefined"
+          :feedback="accountMismatch ? 'Passwords do not match' : undefined"
+        >
+          <n-input
+            v-model:value="account.confirm"
+            type="password"
+            show-password-on="click"
+            placeholder="Re-enter new password"
+          />
+        </n-form-item>
+        <n-space justify="end">
+          <n-button type="primary" :loading="savingAccount" @click="saveAccount">Update account</n-button>
+        </n-space>
+      </n-form>
+    </n-card>
 
     <n-spin :show="loading">
       <n-card title="Scanning" style="margin-bottom: 16px">

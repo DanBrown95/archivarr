@@ -168,18 +168,19 @@ onMounted(() => {
         <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" item-responsive style="margin-bottom: 16px">
           <n-gi span="4 m:1">
             <n-card><n-statistic label="Total files" :value="stats?.totals.files ?? 0">
-              <template #suffix><span class="muted">&nbsp;· {{ formatBytes(stats?.totals.bytes) }}</span></template>
-            </n-statistic></n-card>
+                <template #suffix><span class="muted">&nbsp;· {{ formatBytes(stats?.totals.bytes) }}</span></template>
+              </n-statistic></n-card>
           </n-gi>
           <n-gi span="4 m:1">
             <n-card><n-statistic label="Backed up" :value="stats?.totals.backedFiles ?? 0">
-              <template #suffix><span class="muted">&nbsp;· {{ backedPct }}%</span></template>
-            </n-statistic></n-card>
+                <template #suffix><span class="muted">&nbsp;· {{ backedPct }}%</span></template>
+              </n-statistic></n-card>
           </n-gi>
           <n-gi span="4 m:1">
             <n-card>
               <n-statistic label="Not backed up" :value="stats?.totals.pendingFiles ?? 0">
-                <template #suffix><span class="muted">&nbsp;· {{ formatBytes(stats?.totals.pendingBytes) }}</span></template>
+                <template #suffix><span class="muted">&nbsp;· {{ formatBytes(stats?.totals.pendingBytes)
+                    }}</span></template>
               </n-statistic>
             </n-card>
           </n-gi>
@@ -193,15 +194,10 @@ onMounted(() => {
 
         <n-card>
           <n-space align="center" style="margin-bottom: 12px" :wrap="true">
-            <n-select v-model:value="sourceFilter" :options="sourceOptions" style="width: 200px" />
-            <n-select v-model:value="statusFilter" :options="statusOptions" style="width: 170px" />
-            <n-input
-              v-model:value="search"
-              placeholder="Search path…"
-              clearable
-              style="width: 260px"
-              @keyup.enter="(page = 1), loadMedia()"
-            />
+            <n-select v-model:value="sourceFilter" :options="sourceOptions" style="width: 200px" placeholder="Source" />
+            <n-select v-model:value="statusFilter" :options="statusOptions" style="width: 170px" placeholder="Status" />
+            <n-input v-model:value="search" placeholder="Search path…" clearable style="width: 260px"
+              @keyup.enter="(page = 1), loadMedia()" />
             <n-button @click="(page = 1), loadMedia()">Search</n-button>
           </n-space>
 
@@ -231,7 +227,8 @@ onMounted(() => {
                   </td>
                   <td>
                     <n-space v-if="m.backups.length" :size="4">
-                      <n-tag v-for="b in m.backups" :key="b.driveId" size="small" :bordered="false">{{ b.label }}</n-tag>
+                      <n-tag v-for="b in m.backups" :key="b.driveId" size="small" :bordered="false">{{ b.label
+                        }}</n-tag>
                     </n-space>
                     <span v-else class="muted">—</span>
                   </td>
@@ -250,12 +247,7 @@ onMounted(() => {
 
           <n-space justify="space-between" align="center" style="margin-top: 12px">
             <span class="muted">{{ media.total }} file(s)</span>
-            <n-pagination
-              v-model:page="page"
-              :page-size="pageSize"
-              :item-count="media.total"
-              :page-slot="7"
-            />
+            <n-pagination v-model:page="page" :page-size="pageSize" :item-count="media.total" :page-slot="7" />
           </n-space>
         </n-card>
       </n-tab-pane>
@@ -263,10 +255,7 @@ onMounted(() => {
       <!-- ============ DESTINATIONS ============ -->
       <n-tab-pane name="destinations" tab="Destination drives">
         <n-card>
-          <n-empty
-            v-if="!stats?.destinations.length"
-            description="No destination drives registered yet."
-          />
+          <n-empty v-if="!stats?.destinations.length" description="No destination drives registered yet." />
           <n-table v-else :bordered="false" :single-line="false">
             <thead>
               <tr>
@@ -289,8 +278,10 @@ onMounted(() => {
                 <td class="muted">{{ formatBytes(d.bytes) }}</td>
                 <td>
                   <template v-if="d.capacityBytes">
-                    <n-progress type="line" :percentage="usedPercent(d.freeBytes, d.capacityBytes)" :height="8" :show-indicator="false" />
-                    <span class="muted mono">{{ formatBytes(d.freeBytes) }} free / {{ formatBytes(d.capacityBytes) }}</span>
+                    <n-progress type="line" :percentage="usedPercent(d.freeBytes, d.capacityBytes)" :height="8"
+                      :show-indicator="false" />
+                    <span class="muted mono">{{ formatBytes(d.freeBytes) }} free / {{ formatBytes(d.capacityBytes)
+                      }}</span>
                   </template>
                   <span v-else class="muted">—</span>
                 </td>

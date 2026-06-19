@@ -6,11 +6,19 @@ import (
 	"errors"
 )
 
+// Job origins. Automatic jobs respect the automation pause; manual jobs run
+// regardless (the user explicitly asked for them).
+const (
+	JobOriginManual = "manual"
+	JobOriginAuto   = "auto"
+)
+
 // Job is a unit of background work.
 type Job struct {
 	ID         int64
 	Type       string
 	Status     string
+	Origin     string // 'manual' or 'auto'
 	Params     *string // JSON
 	Progress   float64
 	Stats      *string // JSON
@@ -23,7 +31,7 @@ type Job struct {
 // ErrJobNotFound is returned when a job lookup matches no row.
 var ErrJobNotFound = errors.New("job not found")
 
-const jobColumns = `id, type, status, params_json, progress, stats_json, log,
+const jobColumns = `id, type, status, origin, params_json, progress, stats_json, log,
 	created_at, started_at, finished_at`
 
 func scanJob(s scannable) (Job, error) {
@@ -35,7 +43,7 @@ func scanJob(s scannable) (Job, error) {
 		started  sql.NullInt64
 		finished sql.NullInt64
 	)
-	if err := s.Scan(&j.ID, &j.Type, &j.Status, &params, &j.Progress, &stats, &logStr,
+	if err := s.Scan(&j.ID, &j.Type, &j.Status, &j.Origin, &params, &j.Progress, &stats, &logStr,
 		&j.CreatedAt, &started, &finished); err != nil {
 		return Job{}, err
 	}
@@ -47,11 +55,15 @@ func scanJob(s scannable) (Job, error) {
 	return j, nil
 }
 
-// CreateJob inserts a queued job and returns its id.
-func (d *DB) CreateJob(ctx context.Context, jobType string, params *string) (int64, error) {
+// CreateJob inserts a queued job and returns its id. origin is JobOriginManual
+// or JobOriginAuto.
+func (d *DB) CreateJob(ctx context.Context, jobType string, params *string, origin string) (int64, error) {
+	if origin != JobOriginAuto {
+		origin = JobOriginManual
+	}
 	res, err := d.ExecContext(ctx,
-		`INSERT INTO jobs (type, status, params_json, progress) VALUES (?, 'queued', ?, 0)`,
-		jobType, params)
+		`INSERT INTO jobs (type, status, origin, params_json, progress) VALUES (?, 'queued', ?, ?, 0)`,
+		jobType, origin, params)
 	if err != nil {
 		return 0, err
 	}
@@ -125,6 +137,25 @@ func (d *DB) AppendJobLog(ctx context.Context, id int64, line string) error {
 	_, err := d.ExecContext(ctx,
 		`UPDATE jobs SET log = COALESCE(log, '') || ? WHERE id = ?`, line+"\n", id)
 	return err
+}
+
+// ListQueuedJobIDs returns the ids of all jobs still waiting to run, oldest first.
+func (d *DB) ListQueuedJobIDs(ctx context.Context) ([]int64, error) {
+	rows, err := d.QueryContext(ctx, `SELECT id FROM jobs WHERE status = 'queued' ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // RecoverJobs is called at startup: any job left 'running' by a previous process

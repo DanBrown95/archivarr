@@ -33,12 +33,10 @@ func (m *Monitor) Run(ctx context.Context) {
 	}
 }
 
-// Refresh performs a single reconciliation pass (skipped while paused).
+// Refresh performs a single reconciliation pass. It runs even while automation
+// is paused: drive online/free-space status is read-only and keeping it current
+// means the UI stays accurate and manual backups (which bypass pause) work.
 func (m *Monitor) Refresh(ctx context.Context) {
-	if paused, _, err := m.DB.AutomationPaused(ctx); err == nil && paused {
-		return
-	}
-
 	found, _ := m.Scanner.Scan()
 	byMarker := make(map[string]Found, len(found))
 	for _, f := range found {

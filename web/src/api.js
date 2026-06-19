@@ -2,16 +2,28 @@
 
 const base = '/api'
 
-async function req(method, path, body) {
-  const opts = { method, headers: {} }
+// onUnauthorized is invoked whenever a protected request comes back 401, so the
+// app can bounce the user to the login page. Wired up in main.js.
+let onUnauthorized = null
+export function setUnauthorizedHandler(fn) {
+  onUnauthorized = fn
+}
+
+async function req(method, path, body, opts = {}) {
+  const reqOpts = { method, headers: {} }
   if (body !== undefined) {
-    opts.headers['Content-Type'] = 'application/json'
-    opts.body = JSON.stringify(body)
+    reqOpts.headers['Content-Type'] = 'application/json'
+    reqOpts.body = JSON.stringify(body)
   }
-  const res = await fetch(base + path, opts)
+  const res = await fetch(base + path, reqOpts)
   const text = await res.text()
   const data = text ? JSON.parse(text) : null
   if (!res.ok) {
+    // A 401 on a normal request means the session is gone — surface it globally.
+    // The auth bootstrap calls opt out so a bad-login 401 just shows an error.
+    if (res.status === 401 && !opts.skipAuthRedirect && onUnauthorized) {
+      onUnauthorized()
+    }
     throw new Error((data && data.error) || `HTTP ${res.status}`)
   }
   return data
@@ -28,6 +40,17 @@ function qs(params) {
 
 export const api = {
   health: () => req('GET', '/health'),
+
+  // Auth bootstrap — these skip the global 401 redirect.
+  authStatus: () => req('GET', '/auth/status', undefined, { skipAuthRedirect: true }),
+  setup: (username, password) =>
+    req('POST', '/auth/setup', { username, password }, { skipAuthRedirect: true }),
+  login: (username, password) =>
+    req('POST', '/auth/login', { username, password }, { skipAuthRedirect: true }),
+  logout: () => req('POST', '/auth/logout'),
+  updateAccount: (b) => req('PUT', '/auth/account', b),
+  apiKey: () => req('GET', '/auth/apikey'),
+  regenerateApiKey: () => req('POST', '/auth/apikey/regenerate'),
 
   stats: () => req('GET', '/stats'),
   media: (params) => req('GET', '/media' + qs(params)),
@@ -49,6 +72,7 @@ export const api = {
   job: (id) => req('GET', `/jobs/${id}`),
   createJob: (b) => req('POST', '/jobs', b),
   cancelJob: (id) => req('DELETE', `/jobs/${id}`),
+  clearQueue: () => req('POST', '/jobs/clear-queued'),
 
   automation: () => req('GET', '/automation'),
   pause: (seconds) => req('POST', '/automation/pause', seconds ? { seconds } : {}),

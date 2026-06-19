@@ -192,8 +192,8 @@ function confirmRemove(list) {
 
 <style scoped>
 .lostbox {
-  background: #18181c;
-  border: 1px solid #2a2a30;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 6px;
   padding: 10px;
   max-height: 300px;

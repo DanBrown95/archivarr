@@ -29,15 +29,22 @@ type Deps struct {
 
 // server holds shared handler state.
 type server struct {
-	db      *db.DB
-	scanner drive.Scanner
-	jobs    *jobs.Manager
-	version string
+	db           *db.DB
+	scanner      drive.Scanner
+	jobs         *jobs.Manager
+	version      string
+	loginLimiter *loginLimiter
 }
 
 // NewRouter builds the top-level HTTP handler.
 func NewRouter(d Deps) http.Handler {
-	s := &server{db: d.DB, scanner: d.Scanner, jobs: d.Jobs, version: d.Version}
+	s := &server{
+		db:           d.DB,
+		scanner:      d.Scanner,
+		jobs:         d.Jobs,
+		version:      d.Version,
+		loginLimiter: newLoginLimiter(),
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -46,41 +53,63 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 
 	r.Route("/api", func(r chi.Router) {
+		// Public endpoints: health plus the auth bootstrap (status/setup/login).
 		r.Get("/health", s.health)
-		r.Get("/stats", s.stats)
-		r.Get("/media", s.listMedia)
-
-		r.Route("/drives", func(r chi.Router) {
-			r.Get("/", s.listDrives)
-			r.Post("/", s.createDrive)
-			r.Get("/discovered", s.discoverDrives)
-			r.Post("/register", s.registerDrive)
-			r.Get("/{id}", s.getDrive)
-			r.Delete("/{id}", s.deleteDrive)
-			r.Post("/{id}/scan", s.scanDrive)
+		r.Route("/auth", func(r chi.Router) {
+			r.Get("/status", s.authStatus)
+			r.Post("/setup", s.setup)
+			r.Post("/login", s.login)
+			// Logout, account changes, and API-key management require an existing
+			// browser session — the API key intentionally can't perform these.
+			r.Group(func(r chi.Router) {
+				r.Use(s.requireAuth)
+				r.Post("/logout", s.logout)
+				r.Put("/account", s.updateAccount)
+				r.Get("/apikey", s.getAPIKey)
+				r.Post("/apikey/regenerate", s.regenerateAPIKey)
+			})
 		})
 
-		r.Route("/recovery", func(r chi.Router) {
-			r.Get("/source/{id}", s.sourceRecovery)
-			r.Post("/destination/{id}", s.destinationRequeue)
-		})
+		// The data API accepts either a session or an API key.
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireAuthOrKey)
 
-		r.Route("/jobs", func(r chi.Router) {
-			r.Get("/", s.listJobs)
-			r.Post("/", s.createJob)
-			r.Get("/{id}", s.getJob)
-			r.Delete("/{id}", s.cancelJob)
-		})
+			r.Get("/stats", s.stats)
+			r.Get("/media", s.listMedia)
 
-		r.Route("/automation", func(r chi.Router) {
-			r.Get("/", s.automationState)
-			r.Post("/pause", s.pauseAutomation)
-			r.Post("/resume", s.resumeAutomation)
-		})
+			r.Route("/drives", func(r chi.Router) {
+				r.Get("/", s.listDrives)
+				r.Post("/", s.createDrive)
+				r.Get("/discovered", s.discoverDrives)
+				r.Post("/register", s.registerDrive)
+				r.Get("/{id}", s.getDrive)
+				r.Delete("/{id}", s.deleteDrive)
+				r.Post("/{id}/scan", s.scanDrive)
+			})
 
-		r.Route("/settings", func(r chi.Router) {
-			r.Get("/", s.getSettings)
-			r.Put("/", s.putSettings)
+			r.Route("/recovery", func(r chi.Router) {
+				r.Get("/source/{id}", s.sourceRecovery)
+				r.Post("/destination/{id}", s.destinationRequeue)
+			})
+
+			r.Route("/jobs", func(r chi.Router) {
+				r.Get("/", s.listJobs)
+				r.Post("/", s.createJob)
+				r.Post("/clear-queued", s.clearQueuedJobs)
+				r.Get("/{id}", s.getJob)
+				r.Delete("/{id}", s.cancelJob)
+			})
+
+			r.Route("/automation", func(r chi.Router) {
+				r.Get("/", s.automationState)
+				r.Post("/pause", s.pauseAutomation)
+				r.Post("/resume", s.resumeAutomation)
+			})
+
+			r.Route("/settings", func(r chi.Router) {
+				r.Get("/", s.getSettings)
+				r.Put("/", s.putSettings)
+			})
 		})
 	})
 

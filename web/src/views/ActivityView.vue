@@ -1,10 +1,11 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
-import { useMessage } from 'naive-ui'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useDialog, useMessage } from 'naive-ui'
 import { api } from '../api'
 import { formatTime } from '../util'
 
 const message = useMessage()
+const dialog = useDialog()
 const jobs = ref([])
 const selected = ref(null)
 const showDrawer = ref(false)
@@ -15,6 +16,12 @@ const statusType = {
   running: 'info',
   queued: 'default',
   cancelled: 'warning',
+}
+
+const queuedCount = computed(() => jobs.value.filter((j) => j.status === 'queued').length)
+
+function originLabel(o) {
+  return o === 'auto' ? 'Scheduled' : 'Manual'
 }
 
 function summary(job) {
@@ -54,6 +61,24 @@ async function cancel(job) {
   }
 }
 
+function confirmClearQueue() {
+  dialog.warning({
+    title: 'Clear the queue?',
+    content: `Cancel all ${queuedCount.value} queued job(s) that haven't started yet. Running jobs are not affected.`,
+    positiveText: 'Clear queue',
+    negativeText: 'Cancel',
+    onPositiveClick: async () => {
+      try {
+        const r = await api.clearQueue()
+        message.info(`Cleared ${r.cancelled} queued job(s)`)
+        load()
+      } catch (e) {
+        message.error(String(e))
+      }
+    },
+  })
+}
+
 function openDetail(job) {
   selected.value = job
   showDrawer.value = true
@@ -74,7 +99,12 @@ onUnmounted(() => clearInterval(timer))
         <h1 class="page-title">Activity</h1>
         <p class="page-subtitle" style="margin: 0">Background jobs — scans and backups.</p>
       </div>
-      <n-button quaternary @click="load">Refresh</n-button>
+      <n-space>
+        <n-button v-if="queuedCount" type="error" ghost @click="confirmClearQueue">
+          Clear queue ({{ queuedCount }})
+        </n-button>
+        <n-button quaternary @click="load">Refresh</n-button>
+      </n-space>
     </n-space>
 
     <n-card>
@@ -84,6 +114,7 @@ onUnmounted(() => clearInterval(timer))
           <tr>
             <th style="width: 60px">#</th>
             <th>Type</th>
+            <th style="width: 110px">Trigger</th>
             <th>Status</th>
             <th style="width: 180px">Progress</th>
             <th>Summary</th>
@@ -95,6 +126,11 @@ onUnmounted(() => clearInterval(timer))
           <tr v-for="j in jobs" :key="j.id">
             <td>{{ j.id }}</td>
             <td><n-tag size="small" :bordered="false">{{ j.type }}</n-tag></td>
+            <td>
+              <n-tag size="small" :bordered="false" :type="j.origin === 'auto' ? 'info' : 'default'">
+                {{ originLabel(j.origin) }}
+              </n-tag>
+            </td>
             <td><n-tag size="small" :type="statusType[j.status] || 'default'">{{ j.status }}</n-tag></td>
             <td>
               <n-progress
@@ -146,8 +182,8 @@ onUnmounted(() => clearInterval(timer))
 
 <style scoped>
 .logbox {
-  background: #18181c;
-  border: 1px solid #2a2a30;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 6px;
   padding: 10px;
   max-height: 320px;

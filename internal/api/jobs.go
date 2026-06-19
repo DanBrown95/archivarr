@@ -16,6 +16,7 @@ type jobDTO struct {
 	ID         int64           `json:"id"`
 	Type       string          `json:"type"`
 	Status     string          `json:"status"`
+	Origin     string          `json:"origin"`
 	Progress   float64         `json:"progress"`
 	Params     json.RawMessage `json:"params,omitempty"`
 	Stats      json.RawMessage `json:"stats,omitempty"`
@@ -30,6 +31,7 @@ func toJobDTO(j db.Job) jobDTO {
 		ID:         j.ID,
 		Type:       j.Type,
 		Status:     j.Status,
+		Origin:     j.Origin,
 		Progress:   j.Progress,
 		Log:        j.Log,
 		CreatedAt:  time.Unix(j.CreatedAt, 0).UTC().Format(time.RFC3339),
@@ -102,6 +104,16 @@ func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// clearQueuedJobs cancels every job still waiting to run.
+func (s *server) clearQueuedJobs(w http.ResponseWriter, r *http.Request) {
+	n, err := s.jobs.ClearQueued(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"cancelled": n})
+}
+
 func (s *server) cancelJob(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
@@ -170,7 +182,8 @@ func (s *server) enqueueBackup(w http.ResponseWriter, r *http.Request, sourceID,
 
 func (s *server) createAndEnqueue(w http.ResponseWriter, r *http.Request, jobType string, params []byte) {
 	ps := string(params)
-	id, err := s.db.CreateJob(r.Context(), jobType, &ps)
+	// Jobs created via the API are user-initiated, so they run even while paused.
+	id, err := s.db.CreateJob(r.Context(), jobType, &ps, db.JobOriginManual)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

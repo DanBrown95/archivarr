@@ -33,8 +33,8 @@ answer "what did I lose?" **without** the source or destination drives connected
   marker file regardless of mount path; no privileged container or `/dev` access.
 - ⚙️ **Background jobs** — scans and backups run in a worker pool with live
   progress, logs, cancellation, and crash recovery.
-- ⏸️ **Pause switch** — disable all automated work (indefinitely or for a set
-  time); great for maintenance or testing.
+- ⏸️ **Pause switch** — suspend *scheduled* work (indefinitely or for a set
+  time); manual scans/backups you start still run. Great for maintenance or testing.
 - ⏱️ **Scheduled scans** — automatically keep the library index up to date.
 - 🚫 **Include / exclude filters** — skip `.nfo`, artwork, `@eaDir`, etc., or
   track only chosen extensions.

@@ -81,7 +81,7 @@ internal/
   hash/            XXH3 (128-bit) content hashing, streaming + incremental
   jobs/            worker pool, scheduler, per-destination serialization, dispatch
   backup/          copy + verify engine (hash-while-copy, atomic rename, DB snapshot)
-  api/             chi router, REST handlers, embedded SPA serving
+  api/             chi router, REST handlers, auth (bcrypt + session cookie), embedded SPA serving
 web/               Vue 3 + Naive UI; built to web/dist and embedded
 migrations/        embedded *.sql schema migrations (applied at startup)
 ```
@@ -121,8 +121,48 @@ requested.
 - **One writer per physical destination drive** at a time (a keyed mutex), since a
   single spinning disk hates concurrent writes.
 - A **scheduler** can enqueue scans for every source on an interval.
-- A global **pause** (timed or indefinite) holds jobs `queued` and stops the drive
-  monitor — useful for maintenance/testing.
+- Each job records an **origin** — `auto` (scheduler) or `manual` (user, via the
+  UI/API). The **pause** (timed or indefinite) suspends *automation*: `auto` jobs
+  are held `queued` until resume, while `manual` jobs run regardless — you stay in
+  control by hand. The scheduler also skips creating `auto` jobs while paused, so
+  nothing piles up. The drive monitor keeps running during pause (it's read-only
+  status, and manual backups need current drive state).
+- Queued (not-yet-started) jobs can be cancelled individually or cleared in bulk;
+  cancelling marks them `cancelled` so the worker skips them when dequeued.
+
+## Authentication
+
+The app is **locked down by default**: until an admin account exists, the API
+reports `setupRequired` and the SPA forces first-run account creation. After
+that, every `/api/*` route except `health` and the auth bootstrap
+(`auth/status`, `auth/setup`, `auth/login`) requires a valid session.
+
+The design mirrors the proven Servarr (Radarr/Sonarr) forms-auth model, with its
+known rough edges sanded off:
+
+- **Passwords**: bcrypt (cost 12) via `golang.org/x/crypto/bcrypt` — salting and
+  constant-time comparison are built in.
+- **Sessions**: server-side rows keyed by a 256-bit `crypto/rand` token, in an
+  `HttpOnly`, `SameSite=Lax` cookie (`Secure` when the request is TLS or a proxy
+  set `X-Forwarded-Proto: https`). 30-day **sliding** expiry. Being server-side,
+  sessions are *revocable* — logout deletes the row, and a credential change
+  wipes all of a user's sessions then issues a fresh one (so other devices are
+  signed out). This is the main improvement over Servarr's stateless ticket.
+- **CSRF**: `SameSite=Lax` plus the JSON-only fetch API (cross-site forms can't
+  send `application/json`), matching Servarr's posture without token machinery.
+- **Brute force**: a small in-memory per-IP failed-login throttle. Not a
+  substitute for an edge rate limiter — just a speed bump.
+- **API key** (automation): the data API (`stats`, `media`, `drives`, `jobs`,
+  etc.) also accepts a key via the `X-Api-Key` header or `Authorization: Bearer`
+  — for dashboard widgets (Homepage/Homarr) and job-triggering scripts. The
+  `?apikey=` query form is *not* supported, to keep keys out of request logs.
+  The key is generated lazily, stored readable in `settings`, and managed
+  (view/regenerate) through **session-only** routes, so a leaked key can't rotate
+  itself or change the account. Liveness monitoring uses the public
+  `/api/health` endpoint and needs no key.
+
+Single-user today; the `users` table allows more rows so multi-user/roles stay a
+future option without a migration.
 
 ## Notable technical choices
 

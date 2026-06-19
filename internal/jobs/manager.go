@@ -107,6 +107,19 @@ func (m *Manager) Cancel(jobID int64) bool {
 	return false
 }
 
+// ClearQueued cancels every job still waiting to run (not yet started),
+// returning how many were cleared. Already-running jobs are left alone.
+func (m *Manager) ClearQueued(ctx context.Context) (int, error) {
+	ids, err := m.db.ListQueuedJobIDs(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, id := range ids {
+		m.Cancel(id) // marks queued jobs cancelled; signals any held in waitIfPaused
+	}
+	return len(ids), nil
+}
+
 // waitIfPaused blocks while automated work is paused, until resumed or ctx ends.
 func (m *Manager) waitIfPaused(ctx context.Context) {
 	for {
@@ -154,11 +167,14 @@ func (m *Manager) execute(parent context.Context, jobID int64) {
 		m.mu.Unlock()
 	}()
 
-	// Hold the job (still 'queued') while automation is paused.
-	m.waitIfPaused(jobCtx)
-	if jobCtx.Err() != nil {
-		_ = m.db.MarkJobDone(parent, jobID, "cancelled")
-		return
+	// Automated jobs respect the pause (held at 'queued' until resumed);
+	// manually-triggered jobs run regardless — the user asked for them.
+	if job.Origin == db.JobOriginAuto {
+		m.waitIfPaused(jobCtx)
+		if jobCtx.Err() != nil {
+			_ = m.db.MarkJobDone(parent, jobID, "cancelled")
+			return
+		}
 	}
 
 	_ = m.db.MarkJobRunning(jobCtx, jobID)

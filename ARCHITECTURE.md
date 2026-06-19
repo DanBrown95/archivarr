@@ -146,6 +146,14 @@ known rough edges sanded off:
   send `application/json`), matching Servarr's posture without token machinery.
 - **Brute force**: a small in-memory per-IP failed-login throttle. Not a
   substitute for an edge rate limiter — just a speed bump.
+- **API key** (automation): the data API (`stats`, `media`, `drives`, `jobs`,
+  etc.) also accepts a key via the `X-Api-Key` header or `Authorization: Bearer`
+  — for dashboard widgets (Homepage/Homarr) and job-triggering scripts. The
+  `?apikey=` query form is *not* supported, to keep keys out of request logs.
+  The key is generated lazily, stored readable in `settings`, and managed
+  (view/regenerate) through **session-only** routes, so a leaked key can't rotate
+  itself or change the account. Liveness monitoring uses the public
+  `/api/health` endpoint and needs no key.
 
 Single-user today; the `users` table allows more rows so multi-user/roles stay a
 future option without a migration.

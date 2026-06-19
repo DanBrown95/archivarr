@@ -59,17 +59,20 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/status", s.authStatus)
 			r.Post("/setup", s.setup)
 			r.Post("/login", s.login)
-			// Logout and account changes require an existing session.
+			// Logout, account changes, and API-key management require an existing
+			// browser session — the API key intentionally can't perform these.
 			r.Group(func(r chi.Router) {
 				r.Use(s.requireAuth)
 				r.Post("/logout", s.logout)
 				r.Put("/account", s.updateAccount)
+				r.Get("/apikey", s.getAPIKey)
+				r.Post("/apikey/regenerate", s.regenerateAPIKey)
 			})
 		})
 
-		// Everything else requires authentication.
+		// The data API accepts either a session or an API key.
 		r.Group(func(r chi.Router) {
-			r.Use(s.requireAuth)
+			r.Use(s.requireAuthOrKey)
 
 			r.Get("/stats", s.stats)
 			r.Get("/media", s.listMedia)

@@ -24,7 +24,7 @@ anything substantial before starting a PR.
 - [x] First-run setup that creates a default admin user (app is locked down by default)
 - [x] Login / session handling
 - [x] Change username and password from the UI
-- [ ] ~~(Potentially) Optional API key/token for automation~~
+- [x] API key/token for automation (`X-Api-Key` header; dashboards/scripts)
 - [ ] ~~(Potentially) multi-user / roles~~
 
 ## 🧪 Integrity — bitrot detection (Verify job)

@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -27,6 +29,10 @@ const (
 	minPasswordLen = 8
 	// maxUsernameLen bounds the username to keep things sane.
 	maxUsernameLen = 64
+	// settingAPIKey is the settings-table key holding the automation API key.
+	settingAPIKey = "api.key"
+	// apiKeyHeader is the header headless clients use to authenticate.
+	apiKeyHeader = "X-Api-Key"
 )
 
 // ctxKeyUser is the context key under which the authenticated user is stored.
@@ -56,6 +62,48 @@ func newSessionToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// newAPIKey returns a 128-bit hex API key (32 chars), matching *arr conventions.
+func newAPIKey() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+// extractAPIKey pulls an API key from the request: the X-Api-Key header or an
+// `Authorization: Bearer <key>` header. The `?apikey=` query param is
+// deliberately unsupported so keys don't end up in request logs.
+func extractAPIKey(r *http.Request) string {
+	if k := r.Header.Get(apiKeyHeader); k != "" {
+		return k
+	}
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	return ""
+}
+
+// ensureAPIKey returns the stored API key, generating and persisting one the
+// first time it is requested.
+func (s *server) ensureAPIKey(ctx context.Context) (string, error) {
+	v, ok, err := s.db.GetSetting(ctx, settingAPIKey)
+	if err != nil {
+		return "", err
+	}
+	if ok && v != "" {
+		return v, nil
+	}
+	key, err := newAPIKey()
+	if err != nil {
+		return "", err
+	}
+	if err := s.db.SetSetting(ctx, settingAPIKey, key); err != nil {
+		return "", err
+	}
+	return key, nil
 }
 
 // validateCredentials applies basic username/password rules.
@@ -319,34 +367,94 @@ func (s *server) userFromCookie(r *http.Request) (db.User, bool) {
 	return u, true
 }
 
-// requireAuth is middleware that rejects unauthenticated requests with 401 and
-// otherwise stores the user in the request context (sliding the session).
+// authenticateSession validates the session cookie, slides its expiry forward,
+// and returns the user. It clears a stale cookie but writes no error response.
+func (s *server) authenticateSession(w http.ResponseWriter, r *http.Request) (db.User, bool) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil || c.Value == "" {
+		return db.User{}, false
+	}
+	sess, err := s.db.GetSession(r.Context(), c.Value)
+	if err != nil {
+		s.clearSessionCookie(w, r)
+		return db.User{}, false
+	}
+	u, err := s.db.GetUserByID(r.Context(), sess.UserID)
+	if err != nil {
+		return db.User{}, false
+	}
+	// Slide the session forward so active users stay logged in.
+	expires := time.Now().Add(sessionTTL)
+	_ = s.db.TouchSession(r.Context(), sess.Token, expires.Unix())
+	s.setSessionCookie(w, r, sess.Token, expires)
+	return u, true
+}
+
+// requireAuth is middleware that requires a valid browser session, rejecting
+// other requests with 401 and storing the user in the request context. Used for
+// account/session management, which the API key intentionally cannot perform.
 func (s *server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(sessionCookie)
-		if err != nil || c.Value == "" {
+		u, ok := s.authenticateSession(w, r)
+		if !ok {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		sess, err := s.db.GetSession(r.Context(), c.Value)
-		if err != nil {
-			s.clearSessionCookie(w, r)
-			writeError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-		u, err := s.db.GetUserByID(r.Context(), sess.UserID)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-		// Slide the session forward so active users stay logged in.
-		expires := time.Now().Add(sessionTTL)
-		_ = s.db.TouchSession(r.Context(), sess.Token, expires.Unix())
-		s.setSessionCookie(w, r, sess.Token, expires)
-
 		ctx := context.WithValue(r.Context(), ctxKeyUser{}, u)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// requireAuthOrKey is middleware for the data API: it accepts either a valid
+// browser session or a valid X-Api-Key / Bearer API key. A key grants full data
+// access but carries no user (so account-management handlers stay session-only).
+func (s *server) requireAuthOrKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if provided := extractAPIKey(r); provided != "" {
+			stored, _, err := s.db.GetSetting(r.Context(), settingAPIKey)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if stored != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(stored)) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeError(w, http.StatusUnauthorized, "invalid API key")
+			return
+		}
+		u, ok := s.authenticateSession(w, r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		ctx := context.WithValue(r.Context(), ctxKeyUser{}, u)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// getAPIKey returns the automation API key, generating one on first request.
+func (s *server) getAPIKey(w http.ResponseWriter, r *http.Request) {
+	key, err := s.ensureAPIKey(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"apiKey": key})
+}
+
+// regenerateAPIKey rotates the API key, invalidating any existing integrations.
+func (s *server) regenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+	key, err := newAPIKey()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not generate key")
+		return
+	}
+	if err := s.db.SetSetting(r.Context(), settingAPIKey, key); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"apiKey": key})
 }
 
 // --- login throttle ---

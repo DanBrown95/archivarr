@@ -49,6 +49,8 @@ export const api = {
     req('POST', '/auth/login', { username, password }, { skipAuthRedirect: true }),
   logout: () => req('POST', '/auth/logout'),
   updateAccount: (b) => req('PUT', '/auth/account', b),
+  apiKey: () => req('GET', '/auth/apikey'),
+  regenerateApiKey: () => req('POST', '/auth/apikey/regenerate'),
 
   stats: () => req('GET', '/stats'),
   media: (params) => req('GET', '/media' + qs(params)),

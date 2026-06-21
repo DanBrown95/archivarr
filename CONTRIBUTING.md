@@ -132,8 +132,10 @@ A few ground rules, mostly borrowed from the Servarr projects:
    Good branch names: `add-verify-job`, `fix-scan-timestamp`. Avoid vague names
    like `patch`, `dev`, or `develop`.
 2. Make your changes, with tests, formatted and vetted.
-3. **Open the pull request against `develop` — never `master`.** `master` tracks
-   released/stable code; all work merges through `develop` first.
+3. **Open the pull request against `develop` — never `master` or a release
+   branch.** `develop` is the integration/nightly branch; `master` only ever holds
+   tagged, released code. See [Maintainer: release process](#maintainer-release-process)
+   for how `develop` becomes a release.
 4. Fill in the PR description: what changed, why, and how to test it. Link the
    issue it closes (`Closes #123`).
 
@@ -150,3 +152,90 @@ a prefix.
 
 Expect review comments focused on correctness, consistency, and maintainability —
 they're about the code, not about you. Thanks again for contributing!
+
+---
+
+## Maintainer: release process
+
+This section is for maintainers. **Contributors don't need to do any of this** —
+just target your PR at `develop` (above).
+
+Archivarr uses a [Git Flow](https://nvie.com/posts/a-successful-git-branching-model/)-style
+branching model with two permanent branches and two kinds of temporary branch.
+
+### Branches
+
+| Branch | Lifetime | Purpose |
+| --- | --- | --- |
+| `develop` | permanent | Integration branch. **All PRs merge here.** Nightly / test images build from it. |
+| `master` | permanent | Stable. Only ever receives a finished release/hotfix merge; **every commit is a tagged release**, and stable images build from it. |
+| `release/x.y.z` | temporary | Cut from `develop` to stabilize a release. **Feature-frozen** — only bug fixes. |
+| `hotfix/x.y.z` | temporary | Cut from `master` to patch a critical bug in an already-shipped release. |
+
+This gives two update channels: **`develop` = nightly/beta**, **`master` = stable**.
+
+### Cutting a release
+
+1. Branch a release off `develop` when the feature set is ready to stabilize:
+   ```bash
+   git checkout develop && git pull
+   git checkout -b release/0.2.0
+   git push -u origin release/0.2.0
+   ```
+   `develop` immediately reopens for the next version — new PRs keep merging there
+   while `release/0.2.0` is stabilized.
+2. **Only bug fixes go on the release branch** (version bumps, doc/changelog
+   touch-ups, and fixes for issues found while testing). No new features.
+3. When it's solid, optionally tag a release candidate to soak-test the image
+   first (`v0.2.0-rc.1`), then finish the release:
+   ```bash
+   # Promote to stable
+   git checkout master && git merge --no-ff release/0.2.0
+   git tag -a v0.2.0 -m "v0.2.0"
+   git push origin master --tags        # CI builds archivarr:0.2.0 + :latest
+
+   # Merge the stabilization fixes BACK into develop (see rule below)
+   git checkout develop && git merge --no-ff release/0.2.0
+   git push origin develop
+
+   # Done with the release branch
+   git branch -d release/0.2.0 && git push origin --delete release/0.2.0
+   ```
+
+### Hotfixing a shipped release
+
+For a critical bug in the current stable release when `develop` isn't ready to ship:
+
+```bash
+git checkout -b hotfix/0.2.1 master
+# …fix the bug…
+git checkout master && git merge --no-ff hotfix/0.2.1
+git tag -a v0.2.1 -m "v0.2.1"
+git push origin master --tags
+
+git checkout develop && git merge --no-ff hotfix/0.2.1   # back-merge (see rule)
+git push origin develop
+git branch -d hotfix/0.2.1 && git push origin --delete hotfix/0.2.1
+```
+
+### The one rule that keeps bugs out
+
+**Every fix made on a `release/*` or `hotfix/*` branch MUST be merged back into
+`develop`.** That's why each flow above ends with a merge into `develop`. Skip it
+and the bug reappears in the next release, because `develop` never received the
+fix. Because fixes are authored on the release/hotfix branch and flow back via a
+merge, there's **no cherry-picking** in the normal workflow.
+
+### Versioning
+
+Tags follow [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`).
+Until the first stable tag, expect `0.x` releases where minor bumps may include
+breaking changes.
+
+### GitHub settings to enforce this
+
+- Set **`develop` as the default branch** (Settings → General → Default branch) so
+  new PRs and clones target it automatically.
+- Protect **`master`** and **`develop`** (Settings → Branches): require pull
+  requests, disallow direct pushes, and require status checks once CI exists (see
+  [`TODO.md`](TODO.md)).

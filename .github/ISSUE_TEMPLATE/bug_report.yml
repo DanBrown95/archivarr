@@ -46,8 +46,8 @@ body:
     id: version
     attributes:
       label: Version
-      description: Docker image tag, or the git commit you built from.
-      placeholder: "develop @ a1b2c3d, or image :latest"
+      description: Release tag, Docker image tag, or the git commit you built from.
+      placeholder: "v0.2.0, image :latest, or develop @ a1b2c3d (nightly)"
     validations:
       required: true
   - type: textarea

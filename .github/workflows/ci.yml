@@ -1,0 +1,60 @@
+name: CI
+
+# Gate for every pull request and every push to develop. Does NOT publish
+# anything — it only proves the code is formatted, vetted, tested, and that the
+# Docker image builds. Image publishing lives in publish.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Format, vet & test (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: gofmt (fail if any file is unformatted)
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+  docker:
+    name: Build image (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build the full multi-stage image (frontend + binary) for amd64 to catch
+      # Dockerfile/frontend breakage on PRs. Loaded locally, never pushed.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: archivarr:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

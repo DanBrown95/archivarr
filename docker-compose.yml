@@ -1,10 +1,16 @@
 services:
   archivarr:
+    # Published image (GHCR). Use ':nightly' for the develop/test channel or a
+    # version like ':0.2.0' / ':latest' for stable. Once CI has pushed an image:
+    #   docker compose pull && docker compose up -d
+    image: ghcr.io/danbrown95/archivarr:nightly
+    # To build from source on this host instead of pulling, run:
+    #   docker compose up --build
+    # (the `build:` block below tags the result as the image above).
     build:
       context: .
       args:
         VERSION: "0.1.0-dev"
-    image: archivarr:latest
     container_name: archivarr
     ports:
       - "7979:7979" # Archivarr web UI + API

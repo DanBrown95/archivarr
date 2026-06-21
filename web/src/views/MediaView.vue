@@ -137,6 +137,13 @@ async function backupItem(m, key) {
   }
 }
 
+const coverageColor = computed(() => {
+  const p = backedPct.value
+  if (p == 100) return 'green'
+  if (p >= 50) return 'orange'
+  return 'red'
+})
+
 watch([sourceFilter, statusFilter], () => {
   page.value = 1
   loadMedia()
@@ -155,6 +162,9 @@ onMounted(() => {
       <div>
         <h1 class="page-title">Media</h1>
         <p class="page-subtitle" style="margin: 0">Backup coverage across your source library.</p>
+        <p class="muted" style="margin: 4px 0 0; font-size: 12px">
+          Last scan: {{ stats?.lastScanAt ? formatTime(stats.lastScanAt) : 'never' }}
+        </p>
       </div>
       <n-space>
         <n-button type="primary" :loading="scanning" @click="scanSources">Scan sources</n-button>
@@ -187,7 +197,7 @@ onMounted(() => {
           <n-gi span="4 m:1">
             <n-card>
               <div class="muted" style="font-size: 12px; margin-bottom: 6px">Coverage</div>
-              <n-progress type="line" :percentage="backedPct" :height="12" />
+              <n-progress type="line" :percentage="backedPct" :color="coverageColor" :height="12" />
             </n-card>
           </n-gi>
         </n-grid>
@@ -228,7 +238,7 @@ onMounted(() => {
                   <td>
                     <n-space v-if="m.backups.length" :size="4">
                       <n-tag v-for="b in m.backups" :key="b.driveId" size="small" :bordered="false">{{ b.label
-                        }}</n-tag>
+                      }}</n-tag>
                     </n-space>
                     <span v-else class="muted">—</span>
                   </td>
@@ -281,7 +291,7 @@ onMounted(() => {
                     <n-progress type="line" :percentage="usedPercent(d.freeBytes, d.capacityBytes)" :height="8"
                       :show-indicator="false" />
                     <span class="muted mono">{{ formatBytes(d.freeBytes) }} free / {{ formatBytes(d.capacityBytes)
-                      }}</span>
+                    }}</span>
                   </template>
                   <span v-else class="muted">—</span>
                 </td>

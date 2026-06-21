@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & setup help
+    url: https://github.com/DanBrown95/archivarr/discussions
+    about: For questions, configuration help, and open-ended ideas, please use Discussions. GitHub Issues are for bugs and feature requests only.

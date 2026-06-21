@@ -1,6 +1,9 @@
 package db
 
-import "context"
+import (
+	"context"
+	"database/sql"
+)
 
 // Totals are library-wide backup coverage figures (present source items only).
 type Totals struct {
@@ -77,6 +80,19 @@ func (d *DB) PerSourceStats(ctx context.Context) ([]SourceStat, error) {
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// LastScanAt returns the finished_at (unix seconds) of the most recent successful
+// scan job, derived from the jobs log, or nil if no scan has ever completed.
+func (d *DB) LastScanAt(ctx context.Context) (*int64, error) {
+	var ts sql.NullInt64
+	err := d.QueryRowContext(ctx, `
+		SELECT MAX(finished_at) FROM jobs
+		WHERE type = 'scan' AND status = 'done' AND finished_at IS NOT NULL`).Scan(&ts)
+	if err != nil {
+		return nil, err
+	}
+	return nullInt(ts), nil
 }
 
 // PerDestinationStats returns file count and bytes stored per destination drive.

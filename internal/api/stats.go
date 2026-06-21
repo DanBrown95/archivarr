@@ -31,6 +31,7 @@ type statsDTO struct {
 	Totals       db.Totals       `json:"totals"`
 	Sources      []sourceStatDTO `json:"sources"`
 	Destinations []destStatDTO   `json:"destinations"`
+	LastScanAt   *string         `json:"lastScanAt,omitempty"`
 }
 
 // stats returns library-wide coverage plus per-source and per-destination rollups.
@@ -57,13 +58,23 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	lastScanAt, err := s.db.LastScanAt(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	sourceByID := make(map[int64]db.SourceStat, len(sourceStats))
 	for _, ss := range sourceStats {
 		sourceByID[ss.DriveID] = ss
 	}
 
-	out := statsDTO{Totals: totals, Sources: []sourceStatDTO{}, Destinations: []destStatDTO{}}
+	out := statsDTO{
+		Totals:       totals,
+		Sources:      []sourceStatDTO{},
+		Destinations: []destStatDTO{},
+		LastScanAt:   unixPtrToRFC3339(lastScanAt),
+	}
 	for _, d := range drives {
 		if d.Role == db.RoleSource || d.Role == db.RoleBoth {
 			ss := sourceByID[d.ID]

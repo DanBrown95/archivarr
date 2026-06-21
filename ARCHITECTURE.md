@@ -13,6 +13,17 @@ with nothing plugged in.
 It ships as a **single static Go binary** with the Vue frontend embedded
 (`go:embed`), running as **one unprivileged Docker container**.
 
+## Platform & stack
+
+Archivarr targets **Linux** and runs as a Docker container (tested intent: UGREEN,
+Synology, TrueNAS, generic Linux + Docker). There is no native Windows build —
+`DiskUsage` relies on `syscall.Statfs`, so develop and test via Docker or a
+Linux/WSL environment (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
+
+- **Backend:** Go (`net/http` + `chi`), SQLite (pure-Go `modernc.org/sqlite`)
+- **Frontend:** Vue 3 + Naive UI, embedded into the Go binary via `go:embed`
+- **Packaging:** one static binary, one container
+
 ## Core concepts
 
 | Concept | Meaning |

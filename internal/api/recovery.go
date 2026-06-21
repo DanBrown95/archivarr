@@ -111,7 +111,7 @@ func (s *server) sourceRecovery(w http.ResponseWriter, r *http.Request) {
 }
 
 type destRecoveryDTO struct {
-	Removed  int64  `json:"removed"`
+	Removed  int64 `json:"removed"`
 	BySource []struct {
 		SourceDriveID *int64 `json:"sourceDriveId"`
 		SourceLabel   string `json:"sourceLabel"`

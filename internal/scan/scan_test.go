@@ -165,7 +165,7 @@ func TestScanExcludeAndInclude(t *testing.T) {
 	// Case-insensitive extension + filename matching.
 	root3 := t.TempDir()
 	mustWrite(t, filepath.Join(root3, "movie.mkv"), "v")
-	mustWrite(t, filepath.Join(root3, "movie.TMP"), "t")   // uppercase ext
+	mustWrite(t, filepath.Join(root3, "movie.TMP"), "t") // uppercase ext
 	mustWrite(t, filepath.Join(root3, "archive.7z"), "z")
 	mustWrite(t, filepath.Join(root3, ".DS_Store"), "d")
 	mustWrite(t, filepath.Join(root3, "incomplete.!qB"), "q") // qBittorrent mixed case

@@ -147,6 +147,10 @@ data model.
   (please search first; one report per issue).
 - **Questions, setup help & ideas:** [GitHub Discussions](https://github.com/DanBrown95/archivarr/discussions).
 - **What's planned:** the [Roadmap](#roadmap) below and [`TODO.md`](TODO.md).
+- **Support the project:** if Archivarr saves you a drive (or a headache), you can
+  [sponsor on GitHub](https://github.com/sponsors/DanBrown95) or
+  [buy me a coffee](https://www.buymeacoffee.com/danbrown95) — optional and genuinely
+  appreciated.
 
 This is an early, community-oriented project — feedback and contributions are
 genuinely welcome.

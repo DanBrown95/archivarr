@@ -79,8 +79,8 @@ anything substantial before starting a PR.
 
 ## Release & ops
 
-- [ ] CI (build + test) on PRs
-- [ ] Prebuilt multi-arch Docker images (amd64/arm64) published to a registry
+- [x] CI (gofmt + vet + test + image build on PRs; publish nightly/release on develop/tags)
+- [ ] Prebuilt **multi-arch** Docker images (amd64/**arm64**) published to a registry (currently amd64 only)
 - [ ] PUID/PGID runtime user remapping (linuxserver-style)
 - [x] Apply include/exclude at backup time too (shared `pathfilter` rules)
 - [ ] Configurable logging / log retention (level + format configurable; DB job-log retention/pruning still TODO)

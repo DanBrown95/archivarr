@@ -1,9 +1,9 @@
 services:
   archivarr:
-    # Published image (GHCR). Use ':nightly' for the develop/test channel or a
-    # version like ':0.2.0' / ':latest' for stable. Once CI has pushed an image:
-    #   docker compose pull && docker compose up -d
-    image: ghcr.io/danbrown95/archivarr:nightly
+    # Published image (GHCR). ':latest' tracks the newest stable release; pin a
+    # version like ':1.0.0' to lock it, or use ':nightly' for the dev/test channel.
+    # To update:  docker compose pull && docker compose up -d
+    image: ghcr.io/danbrown95/archivarr:latest
     # To build from source on this host instead of pulling, run:
     #   ./build.sh up --build            (stamps the version from git)
     #   docker compose up --build        (version falls back to "dev")

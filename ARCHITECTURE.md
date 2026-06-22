@@ -88,7 +88,8 @@ internal/
   config/          env-based runtime config
   db/              open/migrate, query layer (drives, media, backups, jobs, settings, stats)
   drive/           marker-file identity, disk usage, mount discovery, online monitor
-  scan/            filesystem walk, size/mtime change detection, include/exclude
+  scan/            filesystem walk, size/mtime change detection
+  pathfilter/      shared include/exclude glob rules (used by scan + backup + import)
   hash/            XXH3 (128-bit) content hashing, streaming + incremental
   jobs/            worker pool, scheduler, per-destination serialization, dispatch
   backup/          copy + verify engine (hash-while-copy, atomic rename, DB snapshot)
@@ -114,7 +115,9 @@ requested.
 
 1. Resolve the source root and the destination's current mount path (both must be
    online).
-2. Select files to copy — everything pending for the source, or a specific list.
+2. Select files to copy — everything pending for the source, or a specific list —
+   then drop any that the **current** `pathfilter` include/exclude rules match, so
+   a backup honors settings changed since the last scan.
 3. For each file: check free space; **stream-copy while hashing in one pass**
    (`io.MultiWriter` into a temp file); `fsync`; verify size; preserve mtime;
    **atomically rename** into place. If a prior hash exists and the copied bytes

@@ -56,7 +56,11 @@ type Runner struct {
 // is empty it backs up every pending file for the source; otherwise it backs up
 // only those items (that belong to the source, are present, and aren't already
 // on this destination).
-func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs []int64, prog Progress) (*Stats, error) {
+//
+// skip, when non-nil, drops any pending file whose relative path it matches, so
+// the backup honors the current include/exclude rules even if media_items is
+// stale (e.g. rules changed since the last scan).
+func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs []int64, skip func(relPath string) bool, prog Progress) (*Stats, error) {
 	if source.RootPath == nil || *source.RootPath == "" {
 		return nil, fmt.Errorf("source drive %d has no root path", source.ID)
 	}
@@ -91,6 +95,24 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 				continue // already on this destination
 			}
 			pending = append(pending, m)
+		}
+	}
+
+	// Honor the current include/exclude rules at copy time (media_items may be
+	// stale relative to settings changed since the last scan).
+	if skip != nil {
+		kept := pending[:0]
+		var excluded int
+		for _, m := range pending {
+			if skip(m.RelPath) {
+				excluded++
+				continue
+			}
+			kept = append(kept, m)
+		}
+		pending = kept
+		if excluded > 0 {
+			prog.logf("skipped %d file(s) matching current exclude/include rules", excluded)
 		}
 	}
 

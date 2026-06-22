@@ -14,6 +14,7 @@ import (
 
 	"github.com/danbrown95/archivarr/internal/backup"
 	"github.com/danbrown95/archivarr/internal/db"
+	"github.com/danbrown95/archivarr/internal/pathfilter"
 	"github.com/danbrown95/archivarr/internal/scan"
 )
 
@@ -118,6 +119,40 @@ func (m *Manager) ClearQueued(ctx context.Context) (int, error) {
 		m.Cancel(id) // marks queued jobs cancelled; signals any held in waitIfPaused
 	}
 	return len(ids), nil
+}
+
+// CreateAndEnqueue creates a new job and schedules it for execution,
+// returning the new job's ID.
+func (m *Manager) CreateAndEnqueue(ctx context.Context, jobType string, params *string, origin string) (int64, error) {
+	id, err := m.db.CreateJob(ctx, jobType, params, origin)
+	if err != nil {
+		return 0, err
+	}
+	m.Enqueue(id)
+	return id, nil
+}
+
+// EnqueueSourceScans creates and enqueues a scan job for every source drive,
+// returning the created job ids. origin is db.JobOriginManual or db.JobOriginAuto.
+func (m *Manager) EnqueueSourceScans(ctx context.Context, hashOnScan bool, origin string) ([]int64, error) {
+	drives, err := m.db.ListDrives(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, d := range drives {
+		if d.Role != db.RoleSource && d.Role != db.RoleBoth {
+			continue
+		}
+		params, _ := json.Marshal(ScanParams{DriveID: d.ID, HashOnScan: hashOnScan})
+		ps := string(params)
+		id, err := m.CreateAndEnqueue(ctx, TypeScan, &ps, origin)
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // waitIfPaused blocks while automated work is paused, until resumed or ctx ends.
@@ -272,7 +307,12 @@ func (m *Manager) runBackup(ctx context.Context, job *db.Job, prog backup.Progre
 	unlock := m.destLocks.Lock(dest.ID)
 	defer unlock()
 
-	stats, runErr := m.backup.RunBackup(ctx, source, dest, p.MediaItemIDs, prog)
+	// Apply the current include/exclude rules at copy time too, so a backup
+	// honors settings changed since the last scan (media_items may be stale).
+	settings, _ := m.db.GetAppSettings(ctx)
+	skip := pathfilter.Rules{Exclude: settings.ScanExclude, IncludeExt: settings.ScanIncludeExt}.Skip
+
+	stats, runErr := m.backup.RunBackup(ctx, source, dest, p.MediaItemIDs, skip, prog)
 	if stats != nil {
 		if b, err := json.Marshal(stats); err == nil {
 			_ = m.db.SetJobStats(ctx, job.ID, string(b))

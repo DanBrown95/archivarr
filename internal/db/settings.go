@@ -19,7 +19,8 @@ const (
 // AppSettings holds user-configurable behavior, persisted as one JSON blob.
 type AppSettings struct {
 	// ScanExclude are glob patterns; a file is skipped if a pattern matches its
-	// basename or any path segment (e.g. "*.nfo", "@eaDir", ".DS_Store").
+	// basename or any path segment, case-insensitively (e.g. "*.nfo", "@eaDir",
+	// ".DS_Store").
 	ScanExclude []string `json:"scanExclude"`
 	// ScanIncludeExt, when non-empty, restricts tracking to these extensions
 	// (without the dot, e.g. "mkv", "mp4"). Empty means all files.
@@ -30,9 +31,28 @@ type AppSettings struct {
 	ScanIntervalMinutes int `json:"scanIntervalMinutes"`
 }
 
+// defaultScanExclude is the starting set of exclude patterns for a fresh install
+// (no saved settings yet). It's a convenience baseline, fully editable per
+// install via Settings. Matching is case-insensitive (see scan.Options.skip).
+var defaultScanExclude = []string{
+	// In-progress / temporary download files
+	"*.tmp", "*.part", "*.!qb", "*.qb!", "*.crdownload", "*.nzb",
+	// OS / NAS junk files
+	".DS_Store", "Thumbs.db", "desktop.ini", "*.thumb",
+	// Logs
+	"*.log",
+	// Executables / scripts (not media)
+	"*.exe", "*.bat", "*.sh", "*.url",
+	// Archives (not media)
+	"*.zip", "*.rar", "*.7z",
+}
+
 // DefaultAppSettings returns the zero-config defaults.
 func DefaultAppSettings() AppSettings {
-	return AppSettings{ScanExclude: []string{}, ScanIncludeExt: []string{}}
+	return AppSettings{
+		ScanExclude:    append([]string(nil), defaultScanExclude...),
+		ScanIncludeExt: []string{},
+	}
 }
 
 // GetAppSettings loads app settings, falling back to defaults.

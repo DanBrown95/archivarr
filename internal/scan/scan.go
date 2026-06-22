@@ -9,13 +9,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/danbrown95/archivarr/internal/db"
 	"github.com/danbrown95/archivarr/internal/hash"
+	"github.com/danbrown95/archivarr/internal/pathfilter"
 )
 
 // Options tunes a scan.
@@ -23,40 +22,17 @@ type Options struct {
 	// HashOnScan computes content hashes inline for new/changed files and
 	// backfills missing hashes for unchanged files. Slower; off by default.
 	HashOnScan bool
-	// Exclude are glob patterns matched against a file's basename or any path
-	// segment; matching files are not tracked.
+	// Exclude are glob patterns matched (case-insensitively) against a file's
+	// basename or any path segment; matching files are not tracked.
 	Exclude []string
 	// IncludeExt, when non-empty, limits tracking to these extensions (no dot).
 	IncludeExt []string
 }
 
-// skip reports whether a slash-relative path should be excluded from tracking.
+// skip reports whether a slash-relative path should be excluded from tracking,
+// delegating to the shared pathfilter rules.
 func (o Options) skip(rel string) bool {
-	base := path.Base(rel)
-	if len(o.IncludeExt) > 0 {
-		ext := strings.ToLower(strings.TrimPrefix(path.Ext(base), "."))
-		ok := false
-		for _, e := range o.IncludeExt {
-			if strings.ToLower(strings.TrimPrefix(e, ".")) == ext {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return true
-		}
-	}
-	for _, pat := range o.Exclude {
-		if m, _ := path.Match(pat, base); m {
-			return true
-		}
-		for _, seg := range strings.Split(rel, "/") {
-			if m, _ := path.Match(pat, seg); m {
-				return true
-			}
-		}
-	}
-	return false
+	return pathfilter.Rules{Exclude: o.Exclude, IncludeExt: o.IncludeExt}.Skip(rel)
 }
 
 // Result summarizes a completed scan.

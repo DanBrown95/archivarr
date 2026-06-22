@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"time"
 
@@ -41,21 +40,12 @@ func (m *Manager) maybeScheduleScans(ctx context.Context, lastScan *time.Time) {
 	}
 	*lastScan = time.Now()
 
-	drives, err := m.db.ListDrives(ctx)
+	ids, err := m.EnqueueSourceScans(ctx, settings.ScanHashOnScan, db.JobOriginAuto)
 	if err != nil {
+		log.Printf("scheduler: enqueue scans: %v", err)
 		return
 	}
-	for _, d := range drives {
-		if d.Role != db.RoleSource && d.Role != db.RoleBoth {
-			continue
-		}
-		params, _ := json.Marshal(ScanParams{DriveID: d.ID, HashOnScan: settings.ScanHashOnScan})
-		ps := string(params)
-		id, err := m.db.CreateJob(ctx, TypeScan, &ps, db.JobOriginAuto)
-		if err != nil {
-			continue
-		}
-		m.Enqueue(id)
-		log.Printf("scheduler: enqueued scan job %d for source drive %d (%s)", id, d.ID, d.Label)
+	if len(ids) > 0 {
+		log.Printf("scheduler: enqueued %d scheduled scan job(s)", len(ids))
 	}
 }

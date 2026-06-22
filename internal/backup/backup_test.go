@@ -9,6 +9,7 @@ import (
 	"github.com/danbrown95/archivarr/internal/backup"
 	"github.com/danbrown95/archivarr/internal/db"
 	"github.com/danbrown95/archivarr/internal/hash"
+	"github.com/danbrown95/archivarr/internal/pathfilter"
 	"github.com/danbrown95/archivarr/internal/scan"
 )
 
@@ -93,7 +94,7 @@ func TestRunBackupCopiesVerifiesRecords(t *testing.T) {
 	ctx := context.Background()
 	runner, database, source, dest, _, destRoot := harness(t)
 
-	stats, err := runner.RunBackup(ctx, source, dest, nil, backup.Progress{})
+	stats, err := runner.RunBackup(ctx, source, dest, nil, nil, backup.Progress{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestRunBackupCopiesVerifiesRecords(t *testing.T) {
 	}
 
 	// Re-running copies nothing.
-	stats2, err := runner.RunBackup(ctx, source, dest, nil, backup.Progress{})
+	stats2, err := runner.RunBackup(ctx, source, dest, nil, nil, backup.Progress{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +148,7 @@ func TestRunBackupSpecificItem(t *testing.T) {
 	}
 	// Back up only the first item.
 	target := items[0]
-	stats, err := runner.RunBackup(ctx, source, dest, []int64{target.ID}, backup.Progress{})
+	stats, err := runner.RunBackup(ctx, source, dest, []int64{target.ID}, nil, backup.Progress{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +164,36 @@ func TestRunBackupSpecificItem(t *testing.T) {
 		t.Fatalf("expected 1 still pending, got %d", len(pending))
 	}
 	// Re-backing-up the same item is a no-op (already on this destination).
-	stats2, _ := runner.RunBackup(ctx, source, dest, []int64{target.ID}, backup.Progress{})
+	stats2, _ := runner.RunBackup(ctx, source, dest, []int64{target.ID}, nil, backup.Progress{})
 	if stats2.Total != 0 {
 		t.Fatalf("expected no-op re-backup, got %+v", stats2)
+	}
+}
+
+func TestRunBackupRespectsFilter(t *testing.T) {
+	ctx := context.Background()
+	runner, database, source, dest, _, destRoot := harness(t)
+
+	// b.mkv is excluded by the current rules even though it's still pending
+	// (e.g. the exclude was added after the last scan tracked it).
+	skip := pathfilter.Rules{Exclude: []string{"b.mkv"}}.Skip
+	stats, err := runner.RunBackup(ctx, source, dest, nil, skip, backup.Progress{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 1 || stats.Copied != 1 {
+		t.Fatalf("expected exactly 1 copied (a.mkv), got %+v", stats)
+	}
+	if _, err := os.Stat(filepath.Join(destRoot, "Movies", "a.mkv")); err != nil {
+		t.Fatalf("a.mkv should be on destination: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destRoot, "Movies", "b.mkv")); !os.IsNotExist(err) {
+		t.Fatalf("excluded b.mkv should not be copied")
+	}
+	// b.mkv stays pending (it was skipped, not backed up).
+	pending, _ := database.ListPendingForBackup(ctx, source.ID)
+	if len(pending) != 1 || pending[0].RelPath != "Movies/b.mkv" {
+		t.Fatalf("expected only Movies/b.mkv pending, got %+v", pending)
 	}
 }
 
@@ -175,7 +203,7 @@ func TestRunBackupStopsWhenFull(t *testing.T) {
 	// Pretend the destination has only 1 byte free.
 	runner.DiskFree = func(string) (uint64, error) { return 1, nil }
 
-	stats, err := runner.RunBackup(ctx, source, dest, nil, backup.Progress{})
+	stats, err := runner.RunBackup(ctx, source, dest, nil, nil, backup.Progress{})
 	if err != nil {
 		t.Fatal(err)
 	}

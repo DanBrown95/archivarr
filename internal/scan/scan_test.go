@@ -162,6 +162,22 @@ func TestScanExcludeAndInclude(t *testing.T) {
 		t.Fatalf("exclude: expected 2 tracked, got %+v", res)
 	}
 
+	// Case-insensitive extension + filename matching.
+	root3 := t.TempDir()
+	mustWrite(t, filepath.Join(root3, "movie.mkv"), "v")
+	mustWrite(t, filepath.Join(root3, "movie.TMP"), "t")   // uppercase ext
+	mustWrite(t, filepath.Join(root3, "archive.7z"), "z")
+	mustWrite(t, filepath.Join(root3, ".DS_Store"), "d")
+	mustWrite(t, filepath.Join(root3, "incomplete.!qB"), "q") // qBittorrent mixed case
+	d3, _ := database.CreateDrive(ctx, db.CreateDriveInput{Label: "S3", Role: db.RoleSource, RootPath: &root3})
+	res3, err := eng.ScanSource(ctx, d3, scan.Options{Exclude: []string{"*.tmp", "*.7z", ".ds_store", "*.!qb"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res3.New != 1 { // only movie.mkv survives
+		t.Fatalf("case-insensitive exclude: expected 1 tracked, got %+v", res3)
+	}
+
 	// Fresh source, include only mkv.
 	root2 := t.TempDir()
 	mustWrite(t, filepath.Join(root2, "movie.mkv"), "v")

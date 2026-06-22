@@ -70,11 +70,12 @@ func main() {
 	go jobManager.RunScheduler(ctx)
 
 	handler := api.NewRouter(api.Deps{
-		Assets:  assets,
-		Version: version,
-		DB:      database,
-		Scanner: scanner,
-		Jobs:    jobManager,
+		Assets:    assets,
+		Version:   version,
+		DB:        database,
+		Scanner:   scanner,
+		Jobs:      jobManager,
+		ConfigDir: cfg.ConfigDir,
 	})
 
 	srv := &http.Server{

@@ -20,11 +20,12 @@ import (
 
 // Deps are the dependencies the router needs.
 type Deps struct {
-	Assets  fs.FS
-	Version string
-	DB      *db.DB
-	Scanner drive.Scanner
-	Jobs    *jobs.Manager
+	Assets    fs.FS
+	Version   string
+	DB        *db.DB
+	Scanner   drive.Scanner
+	Jobs      *jobs.Manager
+	ConfigDir string
 }
 
 // server holds shared handler state.
@@ -33,6 +34,7 @@ type server struct {
 	scanner      drive.Scanner
 	jobs         *jobs.Manager
 	version      string
+	configDir    string
 	loginLimiter *loginLimiter
 }
 
@@ -43,6 +45,7 @@ func NewRouter(d Deps) http.Handler {
 		scanner:      d.Scanner,
 		jobs:         d.Jobs,
 		version:      d.Version,
+		configDir:    d.ConfigDir,
 		loginLimiter: newLoginLimiter(),
 	}
 
@@ -110,6 +113,8 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/", s.getSettings)
 				r.Put("/", s.putSettings)
 			})
+
+			r.Post("/import", s.importLegacy)
 		})
 	})
 

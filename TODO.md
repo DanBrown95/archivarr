@@ -40,7 +40,7 @@ anything substantial before starting a PR.
 - [ ] Scheduled backups (not just scans)
 - [ ] Destination rotation policy (fill drive X → alert/await next drive)
 - [ ] Notify when a drive is full or a backup needs attention
-- [ ] Better/more logging of automated tasks
+- [x] Better/more logging of automated tasks (structured `slog` job lifecycle + failures to stdout)
 
 ## UI polish
 
@@ -83,7 +83,7 @@ anything substantial before starting a PR.
 - [ ] Prebuilt multi-arch Docker images (amd64/arm64) published to a registry
 - [ ] PUID/PGID runtime user remapping (linuxserver-style)
 - [x] Apply include/exclude at backup time too (shared `pathfilter` rules)
-- [ ] Configurable logging / log retention
+- [ ] Configurable logging / log retention (level + format configurable; DB job-log retention/pruning still TODO)
 
 ---
 

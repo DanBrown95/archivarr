@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -50,7 +50,7 @@ func (s *server) putSettings(w http.ResponseWriter, r *http.Request) {
 		// Filters changed: rescan every source so media_items reflects the new
 		// include/exclude rules. Manual origin → runs even while automation is paused.
 		if _, err := s.jobs.EnqueueSourceScans(r.Context(), cfg.ScanHashOnScan, db.JobOriginManual); err != nil {
-			log.Printf("settings: could not enqueue rescan after filter change: %v", err)
+			slog.Error("settings: could not enqueue rescan after filter change", "err", err)
 		}
 	}
 	writeJSON(w, http.StatusOK, cfg)

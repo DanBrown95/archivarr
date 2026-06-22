@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/danbrown95/archivarr/internal/db"
@@ -42,10 +42,10 @@ func (m *Manager) maybeScheduleScans(ctx context.Context, lastScan *time.Time) {
 
 	ids, err := m.EnqueueSourceScans(ctx, settings.ScanHashOnScan, db.JobOriginAuto)
 	if err != nil {
-		log.Printf("scheduler: enqueue scans: %v", err)
+		slog.Error("scheduler: enqueue scans failed", "err", err)
 		return
 	}
 	if len(ids) > 0 {
-		log.Printf("scheduler: enqueued %d scheduled scan job(s)", len(ids))
+		slog.Info("scheduler: enqueued scheduled scans", "count", len(ids))
 	}
 }

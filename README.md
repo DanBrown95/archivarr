@@ -108,6 +108,8 @@ Then open <http://localhost:7979>.
 | `ARCHIVARR_MONITOR_INTERVAL`  | `30`               | Seconds between drive online/offline checks          |
 | `ARCHIVARR_WORKERS`           | `4`                | Background job worker pool size                      |
 | `ARCHIVARR_AUTOMATION_PAUSED` | `false`            | Start with automated work paused (handy for testing) |
+| `ARCHIVARR_LOG_LEVEL`         | `info`             | Log verbosity: `debug`, `info`, `warn`, `error`      |
+| `ARCHIVARR_LOG_FORMAT`        | `text`             | Log format for stdout: `text` or `json`              |
 
 Include/exclude patterns and the auto-scan interval are set in the **Settings**
 tab of the UI.

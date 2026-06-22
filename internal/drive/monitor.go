@@ -2,7 +2,7 @@ package drive
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -47,7 +47,7 @@ func (m *Monitor) Refresh(ctx context.Context) {
 
 	drives, err := m.DB.ListDrives(ctx)
 	if err != nil {
-		log.Printf("drive monitor: list drives: %v", err)
+		slog.Error("drive monitor: list drives failed", "err", err)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (m *Monitor) Refresh(ctx context.Context) {
 
 		if err := m.DB.UpdateDrivePresence(ctx, d.ID, online, mount,
 			int64(usage.CapacityBytes), int64(usage.FreeBytes)); err != nil {
-			log.Printf("drive monitor: update drive %d: %v", d.ID, err)
+			slog.Error("drive monitor: update drive failed", "drive", d.ID, "err", err)
 		}
 	}
 }

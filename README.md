@@ -81,6 +81,12 @@ services:
 docker compose up --build
 ```
 
+> **Versioning.** The app version is derived from git (`git describe`), not edited
+> by hand. Build with `./build.sh up --build` to stamp it from the current tag
+> (tag a release with `git tag v0.2.0` first); a plain `docker compose up --build`
+> reports `dev`. On Windows PowerShell, the equivalent is:
+> `$env:VERSION=(git describe --tags --always --dirty); docker compose up --build`.
+
 Then open <http://localhost:7979>.
 
 1. **Drives → Add source** — point it at your library (e.g. `/media`).
@@ -108,6 +114,8 @@ Then open <http://localhost:7979>.
 | `ARCHIVARR_MONITOR_INTERVAL`  | `30`               | Seconds between drive online/offline checks          |
 | `ARCHIVARR_WORKERS`           | `4`                | Background job worker pool size                      |
 | `ARCHIVARR_AUTOMATION_PAUSED` | `false`            | Start with automated work paused (handy for testing) |
+| `ARCHIVARR_LOG_LEVEL`         | `info`             | Log verbosity: `debug`, `info`, `warn`, `error`      |
+| `ARCHIVARR_LOG_FORMAT`        | `text`             | Log format for stdout: `text` or `json`              |
 
 Include/exclude patterns and the auto-scan interval are set in the **Settings**
 tab of the UI.

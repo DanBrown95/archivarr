@@ -9,6 +9,7 @@ import (
 
 	"github.com/danbrown95/archivarr/internal/db"
 	"github.com/danbrown95/archivarr/internal/hash"
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
 // MetaDirName is the folder on a destination drive holding the DB snapshot.
@@ -56,7 +57,11 @@ type Runner struct {
 // is empty it backs up every pending file for the source; otherwise it backs up
 // only those items (that belong to the source, are present, and aren't already
 // on this destination).
-func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs []int64, prog Progress) (*Stats, error) {
+//
+// skip, when non-nil, drops any pending file whose relative path it matches, so
+// the backup honors the current include/exclude rules even if media_items is
+// stale (e.g. rules changed since the last scan).
+func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs []int64, skip func(relPath string) bool, prog Progress) (*Stats, error) {
 	if source.RootPath == nil || *source.RootPath == "" {
 		return nil, fmt.Errorf("source drive %d has no root path", source.ID)
 	}
@@ -94,6 +99,24 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 		}
 	}
 
+	// Honor the current include/exclude rules at copy time (media_items may be
+	// stale relative to settings changed since the last scan).
+	if skip != nil {
+		kept := pending[:0]
+		var excluded int
+		for _, m := range pending {
+			if skip(m.RelPath) {
+				excluded++
+				continue
+			}
+			kept = append(kept, m)
+		}
+		pending = kept
+		if excluded > 0 {
+			prog.logf("skipped %d file(s) matching current exclude/include rules", excluded)
+		}
+	}
+
 	stats := &Stats{Total: len(pending)}
 	prog.logf("backup start: %d pending file(s), %q -> %q", len(pending), source.Label, dest.Label)
 
@@ -108,7 +131,7 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 				stats.StoppedFull = true
 				stats.Remaining = len(pending) - i
 				prog.logf("destination full: next file needs %s, %s free — stopping, %d file(s) remain",
-					humanBytes(item.Size), humanBytes(int64(free)), stats.Remaining)
+					util.Bytes(item.Size), util.Bytes(int64(free)), stats.Remaining)
 				break
 			}
 		}
@@ -165,7 +188,7 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 		prog.logf("wrote DB snapshot to %s", filepath.Join(destRoot, MetaDirName))
 	}
 
-	prog.logf("backup done: copied %d, failed %d, %s", stats.Copied, stats.Failed, humanBytes(stats.Bytes))
+	prog.logf("backup done: copied %d, failed %d, %s", stats.Copied, stats.Failed, util.Bytes(stats.Bytes))
 	return stats, nil
 }
 
@@ -175,17 +198,4 @@ func (r *Runner) copyDBMeta(ctx context.Context, destRoot string) error {
 		return err
 	}
 	return r.DB.BackupTo(ctx, filepath.Join(metaDir, "archivarr.db"))
-}
-
-func humanBytes(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

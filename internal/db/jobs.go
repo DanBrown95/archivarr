@@ -18,7 +18,7 @@ type Job struct {
 	ID         int64
 	Type       string
 	Status     string
-	Origin     string // 'manual' or 'auto'
+	Origin     string  // 'manual' or 'auto'
 	Params     *string // JSON
 	Progress   float64
 	Stats      *string // JSON

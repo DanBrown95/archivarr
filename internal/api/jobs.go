@@ -183,12 +183,11 @@ func (s *server) enqueueBackup(w http.ResponseWriter, r *http.Request, sourceID,
 func (s *server) createAndEnqueue(w http.ResponseWriter, r *http.Request, jobType string, params []byte) {
 	ps := string(params)
 	// Jobs created via the API are user-initiated, so they run even while paused.
-	id, err := s.db.CreateJob(r.Context(), jobType, &ps, db.JobOriginManual)
+	id, err := s.jobs.CreateAndEnqueue(r.Context(), jobType, &ps, db.JobOriginManual)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.jobs.Enqueue(id)
 	j, err := s.db.GetJob(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

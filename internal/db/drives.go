@@ -134,6 +134,22 @@ func (d *DB) GetDriveByMarker(ctx context.Context, marker string) (*Drive, error
 	return &dr, nil
 }
 
+// GetDriveByLabel returns the oldest drive carrying the given label, or
+// ErrDriveNotFound. Labels are not unique; this is used by the legacy importer
+// to find-or-create destination drives by their script label.
+func (d *DB) GetDriveByLabel(ctx context.Context, label string) (*Drive, error) {
+	row := d.QueryRowContext(ctx,
+		`SELECT `+driveColumns+` FROM drives WHERE label = ? ORDER BY id LIMIT 1`, label)
+	dr, err := scanDrive(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrDriveNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &dr, nil
+}
+
 // ListDrives returns all drives, newest first.
 func (d *DB) ListDrives(ctx context.Context) ([]Drive, error) {
 	rows, err := d.QueryContext(ctx, `SELECT `+driveColumns+` FROM drives ORDER BY id DESC`)

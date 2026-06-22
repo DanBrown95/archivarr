@@ -18,6 +18,8 @@ const (
 	DBFileName             = "archivarr.db"
 	DefaultMonitorInterval = 30 * time.Second
 	DefaultWorkers         = 4
+	DefaultLogLevel        = "info"
+	DefaultLogFormat       = "text"
 )
 
 // DefaultScanRoots are searched for mounted destination drives.
@@ -32,6 +34,8 @@ type Config struct {
 	MonitorInterval time.Duration // how often the drive monitor reconciles state
 	Workers         int           // job worker pool size
 	StartPaused     bool          // begin with automated work paused (handy for dev/testing)
+	LogLevel        string        // debug | info | warn | error
+	LogFormat       string        // text | json
 }
 
 // Load reads configuration from the environment, applying defaults.
@@ -45,6 +49,8 @@ func Load() Config {
 		MonitorInterval: time.Duration(getenvInt("ARCHIVARR_MONITOR_INTERVAL", int(DefaultMonitorInterval.Seconds()))) * time.Second,
 		Workers:         getenvInt("ARCHIVARR_WORKERS", DefaultWorkers),
 		StartPaused:     getenvBool("ARCHIVARR_AUTOMATION_PAUSED", false),
+		LogLevel:        getenv("ARCHIVARR_LOG_LEVEL", DefaultLogLevel),
+		LogFormat:       getenv("ARCHIVARR_LOG_FORMAT", DefaultLogFormat),
 	}
 }
 

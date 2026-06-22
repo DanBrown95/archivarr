@@ -141,6 +141,38 @@ async function save() {
     saving.value = false
   }
 }
+
+// --- Import legacy backup_tracking.db ---
+const importFile = ref('backup_tracking.db')
+const importDryRun = ref(true)
+const importing = ref(false)
+const importResult = ref(null)
+
+async function runImport() {
+  if (!importFile.value.trim()) {
+    message.warning('Enter the file name (it must live in your /config directory)')
+    return
+  }
+  importing.value = true
+  importResult.value = null
+  try {
+    const r = await api.importLegacy({
+      file: importFile.value.trim(),
+      dryRun: importDryRun.value,
+    })
+    importResult.value = r
+    const s = r.stats
+    message.success(
+      r.dryRun
+        ? `Dry run: ${s.backupsInserted} backup(s) would be recorded`
+        : `Imported ${s.backupsInserted} backup(s)`,
+    )
+  } catch (e) {
+    message.error(String(e).replace(/^Error:\s*/, ''))
+  } finally {
+    importing.value = false
+  }
+}
 </script>
 
 <template>
@@ -215,6 +247,49 @@ async function save() {
           Regenerate
         </n-button>
       </n-input-group>
+    </n-card>
+
+    <n-card title="Import legacy backup data" style="margin-bottom: 16px">
+      <p class="muted" style="margin-top: 0">
+        Import the old backup script's <span class="mono">backup_tracking.db</span> so previously
+        backed-up files show as covered instead of pending. Place the file in your
+        <span class="mono">/config</span> directory and enter its name below. Destination drives are
+        created automatically from the file's labels; rows attach to your source drive.
+        <strong>Scan your source first</strong>, then run a dry run before the real import.
+      </p>
+      <n-form label-placement="top">
+        <n-form-item label="File name (in /config)">
+          <n-input v-model:value="importFile" placeholder="backup_tracking.db" class="mono" />
+        </n-form-item>
+        <n-form-item label="Dry run (preview only, writes nothing)">
+          <n-switch v-model:value="importDryRun" />
+        </n-form-item>
+        <n-space justify="end">
+          <n-button type="primary" :loading="importing" @click="runImport">
+            {{ importDryRun ? 'Preview import' : 'Run import' }}
+          </n-button>
+        </n-space>
+      </n-form>
+
+      <n-alert
+        v-if="importResult"
+        :type="importResult.dryRun ? 'info' : 'success'"
+        :title="importResult.dryRun ? 'Dry run — nothing written' : 'Import complete'"
+        style="margin-top: 12px"
+      >
+        <div class="mono" style="font-size: 13px; line-height: 1.6">
+          Lines: {{ importResult.stats.linesTotal }}
+          (parsed {{ importResult.stats.parsed }},
+          skipped {{ importResult.stats.skipped }},
+          errors {{ importResult.stats.errors }})<br />
+          Destination drives created: {{ importResult.stats.destDrivesCreated }}<br />
+          Media items: {{ importResult.stats.mediaMatched }} matched,
+          {{ importResult.stats.mediaCreated }} created<br />
+          Backups: {{ importResult.stats.backupsInserted }}
+          {{ importResult.dryRun ? 'would be recorded' : 'recorded' }},
+          {{ importResult.stats.backupsDuplicate }} already present
+        </div>
+      </n-alert>
     </n-card>
 
     <n-spin :show="loading">

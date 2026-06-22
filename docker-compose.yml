@@ -1,10 +1,18 @@
 services:
   archivarr:
+    # Published image (GHCR). ':latest' tracks the newest stable release; pin a
+    # version like ':1.0.0' to lock it, or use ':nightly' for the dev/test channel.
+    # To update:  docker compose pull && docker compose up -d
+    image: ghcr.io/danbrown95/archivarr:latest
+    # To build from source on this host instead of pulling, run:
+    #   ./build.sh up --build            (stamps the version from git)
+    #   docker compose up --build        (version falls back to "dev")
+    # (the `build:` block below tags the result as the image above).
     build:
       context: .
       args:
-        VERSION: "0.1.0-dev"
-    image: archivarr:latest
+        # Stamped from git by build.sh (git describe); falls back to "dev".
+        VERSION: ${VERSION:-dev}
     container_name: archivarr
     ports:
       - "7979:7979" # Archivarr web UI + API

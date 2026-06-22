@@ -13,6 +13,8 @@ services:
   archivarr:
     build:
       context: .
+      args:
+        VERSION: ${VERSION:-dev}
     image: archivarr:local
     container_name: archivarr-local
     ports:

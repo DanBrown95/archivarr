@@ -1,0 +1,13 @@
+# Normalize line endings: LF in the repository and on checkout, on every OS.
+# Keeps the gofmt CI gate from tripping on Windows CRLF checkouts and prevents
+# accidental CRLF commits.
+* text=auto eol=lf
+
+# Binary assets — never alter their bytes.
+*.png  binary
+*.ico  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.woff  binary
+*.woff2 binary

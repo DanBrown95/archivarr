@@ -8,13 +8,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/danbrown95/archivarr/internal/backup"
 	"github.com/danbrown95/archivarr/internal/db"
+	"github.com/danbrown95/archivarr/internal/pathfilter"
 	"github.com/danbrown95/archivarr/internal/scan"
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
 // Job type identifiers.
@@ -73,7 +75,7 @@ func (m *Manager) Start(ctx context.Context) {
 	m.baseCtx = ctx
 	requeue, err := m.db.RecoverJobs(ctx)
 	if err != nil {
-		log.Printf("jobs: recovery: %v", err)
+		slog.Error("job recovery failed", "err", err)
 	}
 	for i := 0; i < m.workers; i++ {
 		go m.worker(ctx)
@@ -120,6 +122,40 @@ func (m *Manager) ClearQueued(ctx context.Context) (int, error) {
 	return len(ids), nil
 }
 
+// CreateAndEnqueue creates a new job and schedules it for execution,
+// returning the new job's ID.
+func (m *Manager) CreateAndEnqueue(ctx context.Context, jobType string, params *string, origin string) (int64, error) {
+	id, err := m.db.CreateJob(ctx, jobType, params, origin)
+	if err != nil {
+		return 0, err
+	}
+	m.Enqueue(id)
+	return id, nil
+}
+
+// EnqueueSourceScans creates and enqueues a scan job for every source drive,
+// returning the created job ids. origin is db.JobOriginManual or db.JobOriginAuto.
+func (m *Manager) EnqueueSourceScans(ctx context.Context, hashOnScan bool, origin string) ([]int64, error) {
+	drives, err := m.db.ListDrives(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, d := range drives {
+		if d.Role != db.RoleSource && d.Role != db.RoleBoth {
+			continue
+		}
+		params, _ := json.Marshal(ScanParams{DriveID: d.ID, HashOnScan: hashOnScan})
+		ps := string(params)
+		id, err := m.CreateAndEnqueue(ctx, TypeScan, &ps, origin)
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
 // waitIfPaused blocks while automated work is paused, until resumed or ctx ends.
 func (m *Manager) waitIfPaused(ctx context.Context) {
 	for {
@@ -149,7 +185,7 @@ func (m *Manager) worker(ctx context.Context) {
 func (m *Manager) execute(parent context.Context, jobID int64) {
 	job, err := m.db.GetJob(parent, jobID)
 	if err != nil {
-		log.Printf("jobs: load %d: %v", jobID, err)
+		slog.Error("could not load job", "job", jobID, "err", err)
 		return
 	}
 	if job.Status == "cancelled" {
@@ -179,27 +215,34 @@ func (m *Manager) execute(parent context.Context, jobID int64) {
 
 	_ = m.db.MarkJobRunning(jobCtx, jobID)
 	prog := m.reporter(jobID)
+	started := time.Now()
+	slog.Info("job started", "job", jobID, "type", job.Type, "origin", job.Origin)
 
+	var summary string
 	var runErr error
 	switch job.Type {
 	case TypeScan:
-		runErr = m.runScan(jobCtx, job, prog)
+		summary, runErr = m.runScan(jobCtx, job, prog)
 	case TypeBackup:
-		runErr = m.runBackup(jobCtx, job, prog)
+		summary, runErr = m.runBackup(jobCtx, job, prog)
 	default:
 		runErr = fmt.Errorf("unknown job type %q", job.Type)
 	}
 
+	dur := time.Since(started).Round(time.Millisecond)
 	switch {
 	case runErr == nil:
 		_ = m.db.SetJobProgress(parent, jobID, 1)
 		_ = m.db.MarkJobDone(parent, jobID, "done")
+		slog.Info("job completed", "job", jobID, "type", job.Type, "summary", summary, "dur", dur.String())
 	case errors.Is(runErr, context.Canceled):
 		_ = m.db.AppendJobLog(parent, jobID, "cancelled")
 		_ = m.db.MarkJobDone(parent, jobID, "cancelled")
+		slog.Warn("job cancelled", "job", jobID, "type", job.Type, "dur", dur.String())
 	default:
 		_ = m.db.AppendJobLog(parent, jobID, "error: "+runErr.Error())
 		_ = m.db.MarkJobDone(parent, jobID, "failed")
+		slog.Error("job failed", "job", jobID, "type", job.Type, "err", runErr.Error(), "dur", dur.String())
 	}
 }
 
@@ -227,14 +270,15 @@ func (m *Manager) reporter(jobID int64) backup.Progress {
 	}
 }
 
-func (m *Manager) runScan(ctx context.Context, job *db.Job, prog backup.Progress) error {
+// runScan executes a scan job and returns a short human summary for the log.
+func (m *Manager) runScan(ctx context.Context, job *db.Job, prog backup.Progress) (string, error) {
 	var p ScanParams
 	if err := unmarshalParams(job, &p); err != nil {
-		return err
+		return "", err
 	}
 	drive, err := m.db.GetDrive(ctx, p.DriveID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	settings, _ := m.db.GetAppSettings(ctx)
 	prog.OnLog(fmt.Sprintf("scanning %q (hashOnScan=%v)", drive.Label, p.HashOnScan))
@@ -244,41 +288,53 @@ func (m *Manager) runScan(ctx context.Context, job *db.Job, prog backup.Progress
 		IncludeExt: settings.ScanIncludeExt,
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	if b, err := json.Marshal(res); err == nil {
 		_ = m.db.SetJobStats(ctx, job.ID, string(b))
 	}
-	prog.OnLog(fmt.Sprintf("scan done: %d new, %d changed, %d unchanged, %d missing, %d hashed",
-		res.New, res.Changed, res.Unchanged, res.Missing, res.Hashed))
-	return nil
+	summary := fmt.Sprintf("%d new, %d changed, %d unchanged, %d missing, %d hashed",
+		res.New, res.Changed, res.Unchanged, res.Missing, res.Hashed)
+	prog.OnLog("scan done: " + summary)
+	return summary, nil
 }
 
-func (m *Manager) runBackup(ctx context.Context, job *db.Job, prog backup.Progress) error {
+// runBackup executes a backup job and returns a short human summary for the log.
+func (m *Manager) runBackup(ctx context.Context, job *db.Job, prog backup.Progress) (string, error) {
 	var p BackupParams
 	if err := unmarshalParams(job, &p); err != nil {
-		return err
+		return "", err
 	}
 	source, err := m.db.GetDrive(ctx, p.SourceDriveID)
 	if err != nil {
-		return fmt.Errorf("source drive: %w", err)
+		return "", fmt.Errorf("source drive: %w", err)
 	}
 	dest, err := m.db.GetDrive(ctx, p.DestDriveID)
 	if err != nil {
-		return fmt.Errorf("destination drive: %w", err)
+		return "", fmt.Errorf("destination drive: %w", err)
 	}
 
 	// One writer per physical destination drive at a time.
 	unlock := m.destLocks.Lock(dest.ID)
 	defer unlock()
 
-	stats, runErr := m.backup.RunBackup(ctx, source, dest, p.MediaItemIDs, prog)
+	// Apply the current include/exclude rules at copy time too, so a backup
+	// honors settings changed since the last scan (media_items may be stale).
+	settings, _ := m.db.GetAppSettings(ctx)
+	skip := pathfilter.Rules{Exclude: settings.ScanExclude, IncludeExt: settings.ScanIncludeExt}.Skip
+
+	stats, runErr := m.backup.RunBackup(ctx, source, dest, p.MediaItemIDs, skip, prog)
+	var summary string
 	if stats != nil {
 		if b, err := json.Marshal(stats); err == nil {
 			_ = m.db.SetJobStats(ctx, job.ID, string(b))
 		}
+		summary = fmt.Sprintf("copied %d, failed %d, %s", stats.Copied, stats.Failed, util.Bytes(stats.Bytes))
+		if stats.StoppedFull {
+			summary += fmt.Sprintf(", destination full (%d remaining)", stats.Remaining)
+		}
 	}
-	return runErr
+	return summary, runErr
 }
 
 func unmarshalParams(job *db.Job, v any) error {

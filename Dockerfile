@@ -16,7 +16,7 @@ RUN go mod download
 COPY . .
 # Replace the committed placeholder dist with the freshly built assets.
 COPY --from=web /web/dist ./web/dist
-ARG VERSION=docker
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/archivarr ./cmd/archivarr

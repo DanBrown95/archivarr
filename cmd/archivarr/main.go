@@ -49,6 +49,11 @@ func setupLogging(cfg config.Config) {
 	slog.SetDefault(slog.New(h))
 }
 
+func printBanner(version string) {
+	fmt.Print(ASCII_BANNER)
+	fmt.Printf("  offline-first NAS media backup  -  %s\n\n", version)
+}
+
 // fatal logs an error and exits non-zero (used for unrecoverable startup errors).
 func fatal(msg string, err error) {
 	slog.Error(msg, "err", err)
@@ -58,6 +63,10 @@ func fatal(msg string, err error) {
 func main() {
 	cfg := config.Load()
 	setupLogging(cfg)
+
+	if cfg.LogFormat == "text" {
+		printBanner(version)
+	}
 
 	assets, err := web.DistFS()
 	if err != nil {

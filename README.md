@@ -81,6 +81,12 @@ services:
 docker compose up --build
 ```
 
+> **Versioning.** The app version is derived from git (`git describe`), not edited
+> by hand. Build with `./build.sh up --build` to stamp it from the current tag
+> (tag a release with `git tag v0.2.0` first); a plain `docker compose up --build`
+> reports `dev`. On Windows PowerShell, the equivalent is:
+> `$env:VERSION=(git describe --tags --always --dirty); docker compose up --build`.
+
 Then open <http://localhost:7979>.
 
 1. **Drives → Add source** — point it at your library (e.g. `/media`).

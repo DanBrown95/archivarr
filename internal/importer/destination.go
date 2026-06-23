@@ -18,9 +18,9 @@ import (
 // local to avoid importing the backup package here).
 const metaDir = "_backup_meta"
 
-// FSOptions controls a filesystem-based destination import (Mode A): walk an
-// existing backup drive and register files that match a source's tracked media
-// items as existing backups, so they aren't re-copied.
+// FSOptions controls a filesystem destination import: walk an existing backup
+// drive and register files that match a source's tracked media items as existing
+// backups, so they aren't re-copied.
 type FSOptions struct {
 	SourceDriveID int64
 	DestDriveID   int64
@@ -32,7 +32,7 @@ type FSOptions struct {
 	OnLog         func(msg string)
 }
 
-// FSStats summarizes a Mode A import.
+// FSStats summarizes a filesystem destination import.
 type FSStats struct {
 	FilesSeen    int `json:"filesSeen"`
 	Imported     int `json:"imported"`     // backups newly registered

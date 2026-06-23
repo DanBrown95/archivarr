@@ -349,8 +349,11 @@ func (m *Manager) runBackup(ctx context.Context, job *db.Job, prog backup.Progre
 	return summary, runErr
 }
 
-// runImport scans an existing destination drive and registers files that match
-// the source's tracked media items as backups (Mode A — filesystem match).
+// runImport registers an existing destination drive's files as backups of the
+// chosen source, so they aren't re-copied. A drive carrying an Archivarr DB
+// snapshot is matched from that snapshot (by path, then content hash); any other
+// drive is matched by walking its filesystem. Either way only files that map to
+// the current source are recorded — unmatched files are reported, never created.
 func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progress) (string, error) {
 	var p ImportParams
 	if err := unmarshalParams(job, &p); err != nil {
@@ -363,11 +366,15 @@ func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progre
 	if dest.LastMountPath == nil || *dest.LastMountPath == "" {
 		return "", fmt.Errorf("destination %q is not mounted", dest.Label)
 	}
+	destRoot := *dest.LastMountPath
+
+	// Both modes match recorded files against a chosen current source — neither
+	// creates sources or media.
 	source, err := m.db.GetDrive(ctx, p.SourceDriveID)
 	if err != nil {
 		return "", fmt.Errorf("source drive: %w", err)
 	}
-	if source.RootPath != nil && util.PathsOverlap(*source.RootPath, *dest.LastMountPath) {
+	if source.RootPath != nil && util.PathsOverlap(*source.RootPath, destRoot) {
 		return "", fmt.Errorf("destination %q and source %q share a location — refusing to import the source onto itself", dest.Label, source.Label)
 	}
 
@@ -375,6 +382,33 @@ func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progre
 	unlock := m.destLocks.Lock(dest.ID)
 	defer unlock()
 
+	// Snapshot match: an Archivarr drive carries its own DB snapshot — match what
+	// it recorded as backed up against the current source (path, then content hash).
+	if importer.HasSnapshot(destRoot) {
+		marker := ""
+		if dest.MarkerID != nil {
+			marker = *dest.MarkerID
+		}
+		prog.OnLog(fmt.Sprintf("found Archivarr snapshot on %q — matching recorded backups against source %q", dest.Label, source.Label))
+		st, err := importer.ImportDestinationSnapshot(ctx, m.db, importer.SnapshotOptions{
+			SnapshotPath:  importer.SnapshotPath(destRoot),
+			DestDriveID:   dest.ID,
+			DestMarkerID:  marker,
+			SourceDriveID: source.ID,
+			OnProgress:    prog.OnProgress,
+			OnLog:         prog.OnLog,
+		})
+		if b, jerr := json.Marshal(st); jerr == nil {
+			_ = m.db.SetJobStats(ctx, job.ID, string(b))
+		}
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("snapshot: %d imported (%d by hash), %d already known, %d unmatched",
+			st.Imported, st.MatchedByHash, st.AlreadyKnown, st.Unmatched), nil
+	}
+
+	// Filesystem match: a foreign/manual drive — walk it and match files against the source.
 	settings, _ := m.db.GetAppSettings(ctx)
 	prog.OnLog(fmt.Sprintf("importing existing backups on %q, matching against source %q (verify=%v)",
 		dest.Label, source.Label, p.Verify))
@@ -382,7 +416,7 @@ func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progre
 	st, err := importer.ImportDestinationFS(ctx, m.db, importer.FSOptions{
 		SourceDriveID: source.ID,
 		DestDriveID:   dest.ID,
-		DestRoot:      *dest.LastMountPath,
+		DestRoot:      destRoot,
 		Verify:        p.Verify,
 		Exclude:       settings.ScanExclude,
 		IncludeExt:    settings.ScanIncludeExt,

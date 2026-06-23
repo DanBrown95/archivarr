@@ -203,6 +203,8 @@ func (s *server) enqueueImport(w http.ResponseWriter, r *http.Request, destID, s
 		writeError(w, http.StatusBadRequest, "destination drive must be online to import from it")
 		return
 	}
+	// Both import modes match recorded files against a current source, so one is
+	// always required (even for snapshot drives — we match, never recreate).
 	src, err := s.resolveImportSource(r.Context(), sourceID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

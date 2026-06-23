@@ -261,25 +261,23 @@ async function registerMount(m) {
       style="width: 520px"
     >
       <p class="muted" style="margin-top: 0">
-        Scans this destination and registers files that match a source's tracked media as
-        existing backups, so they aren't re-copied. Files with no match are reported, not added —
-        so add and scan the source first.
+        Registers files already on this destination as existing backups of the source you choose,
+        so they aren't re-copied. Files are matched by path — and by content hash when available
+        (e.g. from an Archivarr snapshot, which survives a reorganized source). Files that don't
+        match the source are reported, not added; nothing is created.
       </p>
       <n-alert v-if="!sourceOptions.length" type="warning" :bordered="false" style="margin-bottom: 12px">
         No source drives yet — add and scan a source first so there's something to match against.
       </n-alert>
       <n-form label-placement="top">
         <n-form-item label="These backups belong to source">
-          <n-select
-            v-model:value="importForm.sourceId"
-            :options="sourceOptions"
-            placeholder="Choose a source"
-          />
+          <n-select v-model:value="importForm.sourceId" :options="sourceOptions" placeholder="Choose a source" />
         </n-form-item>
         <n-form-item label="Verify with hashes">
           <n-switch v-model:value="importForm.verify" />
           <span class="muted" style="margin-left: 12px">
-            Slower — reads and hashes each file to confirm it matches the source. Off = match by path + size.
+            Filesystem imports only — reads and hashes each file to confirm it matches the source.
+            Drives with an Archivarr snapshot use their stored hashes automatically.
           </span>
         </n-form-item>
       </n-form>

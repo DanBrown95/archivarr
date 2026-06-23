@@ -76,7 +76,7 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 		LastScanAt:   unixPtrToRFC3339(lastScanAt),
 	}
 	for _, d := range drives {
-		if d.Role == db.RoleSource || d.Role == db.RoleBoth {
+		if d.Role == db.RoleSource {
 			ss := sourceByID[d.ID]
 			out.Sources = append(out.Sources, sourceStatDTO{
 				DriveID:      d.ID,
@@ -89,7 +89,7 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 				PendingBytes: ss.PendingBytes,
 			})
 		}
-		if d.Role == db.RoleDestination || d.Role == db.RoleBoth {
+		if d.Role == db.RoleDestination {
 			ds := destStats[d.ID]
 			out.Destinations = append(out.Destinations, destStatDTO{
 				DriveID:       d.ID,

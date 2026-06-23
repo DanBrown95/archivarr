@@ -69,6 +69,9 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 		return nil, fmt.Errorf("destination drive %d is not mounted", dest.ID)
 	}
 	srcRoot, destRoot := *source.RootPath, *dest.LastMountPath
+	if util.PathsOverlap(srcRoot, destRoot) {
+		return nil, fmt.Errorf("source %q and destination %q share a location — refusing to back up onto the source", srcRoot, destRoot)
+	}
 	if fi, err := os.Stat(srcRoot); err != nil || !fi.IsDir() {
 		return nil, fmt.Errorf("source root not accessible: %s", srcRoot)
 	}

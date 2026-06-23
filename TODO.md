@@ -63,9 +63,13 @@ anything substantial before starting a PR.
 
 ## Import & visibility
 
-- [ ] **Import existing backup drives** — scan a drive that already holds backups
+- [~] **Import existing backup drives** — scan a drive that already holds backups
       (from manual copies or another tool) and register its files as existing
       backups, so they aren't re-copied.
+      - [x] Mode A: filesystem scan, match to a scanned source by path (+size),
+            optional hash-verify; unmatched files reported, not created
+      - [ ] Mode B: re-import from a drive's `_backup_meta/archivarr.db` snapshot
+            (perfect re-adoption / recovery)
 - [ ] **Per-destination file listing** — browse the exact files stored on a given
       destination drive (currently only counts are shown).
 - [ ] Explicit "prune stale entries" action (currently implicit: vanished source

@@ -10,16 +10,16 @@ const jobs = ref([])
 const error = ref(null)
 
 const onlineDrives = computed(() => drives.value.filter((d) => d.online).length)
-const sources = computed(() => drives.value.filter((d) => d.role === 'source' || d.role === 'both').length)
-const dests = computed(() => drives.value.filter((d) => d.role === 'destination' || d.role === 'both').length)
+const sources = computed(() => drives.value.filter((d) => d.role === 'source').length)
+const dests = computed(() => drives.value.filter((d) => d.role === 'destination').length)
 const destCapacity = computed(() =>
   drives.value
-    .filter((d) => (d.role === 'destination' || d.role === 'both') && d.online)
+    .filter((d) => d.role === 'destination' && d.online)
     .reduce((a, d) => a + (d.capacityBytes || 0), 0),
 )
 const destFree = computed(() =>
   drives.value
-    .filter((d) => (d.role === 'destination' || d.role === 'both') && d.online)
+    .filter((d) => d.role === 'destination' && d.online)
     .reduce((a, d) => a + (d.freeBytes || 0), 0),
 )
 const recentJobs = computed(() => jobs.value.slice(0, 6))
@@ -43,6 +43,21 @@ async function load() {
     error.value = String(e)
   }
 }
+
+const GeneralSetupInstructions = [
+  'Ensure your source and destination drives are connected to the system.',
+  'Add the source drive in the "Drives" page and mark it as a source drive.',
+  'Add the destination drive in the "Drives" page and mark it as a destination drive.',
+  'Modify the Include/Exclude patterns in the "Settings" page to specify which files to scan for / back up. (optional)',
+  'Run a scan on the source drive to detect files matching the Include/Exclude patterns.',
+  'Run a backup job to copy files from the source drive to the destination drive.',
+]
+const ImportDestinationInstructions = [
+  'Ensure your source and destination drives are connected to the system.',
+  'Ensure both the source and destination drives are created in the "Drives" page and marked as source and destination drives respectively.',
+  'Run an import job on the destination to log backed up files into the database and match them with the source drive files.',
+]
+
 onMounted(load)
 </script>
 
@@ -56,8 +71,8 @@ onMounted(load)
     <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" item-responsive>
       <n-gi span="4 m:1">
         <n-card><n-statistic label="Drives online" :value="onlineDrives">
-          <template #suffix><span class="muted"> / {{ drives.length }}</span></template>
-        </n-statistic></n-card>
+            <template #suffix><span class="muted"> / {{ drives.length }}</span></template>
+          </n-statistic></n-card>
       </n-gi>
       <n-gi span="4 m:1">
         <n-card><n-statistic label="Source drives" :value="sources" /></n-card>
@@ -77,13 +92,9 @@ onMounted(load)
             {{ formatBytes(destFree) }}
             <template #suffix><span class="muted"> / {{ formatBytes(destCapacity) }}</span></template>
           </n-statistic>
-          <n-progress
-            type="line"
-            style="margin-top: 12px"
-            :percentage="destCapacity ? Math.round(((destCapacity - destFree) / destCapacity) * 100) : 0"
-            :height="10"
-            :show-indicator="false"
-          />
+          <n-progress type="line" style="margin-top: 12px"
+            :percentage="destCapacity ? Math.round(((destCapacity - destFree) / destCapacity) * 100) : 0" :height="10"
+            :show-indicator="false" />
         </n-card>
       </n-gi>
 
@@ -100,6 +111,30 @@ onMounted(load)
                 <span class="muted">{{ formatTime(j.finishedAt || j.createdAt) }}</span>
                 <n-tag size="small" :type="statusType[j.status] || 'default'">{{ j.status }}</n-tag>
               </n-space>
+            </n-list-item>
+          </n-list>
+        </n-card>
+      </n-gi>
+    </n-grid>
+
+    <n-grid :cols="1" :x-gap="16" :y-gap="16" responsive="screen" item-responsive style="margin-top: 16px">
+      <n-gi span="1">
+        <n-card title="General Setup Instructions">
+          <span class="muted">Follow these steps to set up your source and destination drives for backup.</span>
+          <n-list>
+            <n-list-item v-for="(instruction, index) in GeneralSetupInstructions" :key="index">
+              {{ instruction }}
+            </n-list-item>
+          </n-list>
+        </n-card>
+      </n-gi>
+      <n-gi span="1">
+        <n-card title="Import Existing Destination Instructions">
+          <span class="muted">Follow these steps to import existing backed up files from your destination drive into the
+            database.</span>
+          <n-list>
+            <n-list-item v-for="(instruction, index) in ImportDestinationInstructions" :key="index">
+              {{ instruction }}
             </n-list-item>
           </n-list>
         </n-card>

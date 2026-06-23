@@ -81,10 +81,11 @@ func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
 type createJobReq struct {
 	Type          string  `json:"type"`
 	DriveID       int64   `json:"driveId"`       // scan
-	SourceDriveID int64   `json:"sourceDriveId"` // backup
-	DestDriveID   int64   `json:"destDriveId"`   // backup
+	SourceDriveID int64   `json:"sourceDriveId"` // backup, import
+	DestDriveID   int64   `json:"destDriveId"`   // backup, import
 	MediaItemIDs  []int64 `json:"mediaItemIds"`  // backup (optional: specific files)
 	HashOnScan    bool    `json:"hashOnScan"`    // scan
+	Verify        bool    `json:"verify"`        // import (hash-verify matches)
 }
 
 func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
@@ -99,8 +100,10 @@ func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 		s.enqueueScan(w, r, req.DriveID, req.HashOnScan)
 	case jobs.TypeBackup:
 		s.enqueueBackup(w, r, req.SourceDriveID, req.DestDriveID, req.MediaItemIDs)
+	case jobs.TypeImport:
+		s.enqueueImport(w, r, req.DestDriveID, req.SourceDriveID, req.Verify)
 	default:
-		writeError(w, http.StatusBadRequest, "type must be 'scan' or 'backup'")
+		writeError(w, http.StatusBadRequest, "type must be 'scan', 'backup', or 'import'")
 	}
 }
 
@@ -139,7 +142,7 @@ func (s *server) enqueueScan(w http.ResponseWriter, r *http.Request, driveID int
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if d.Role != db.RoleSource && d.Role != db.RoleBoth {
+	if d.Role != db.RoleSource {
 		writeError(w, http.StatusBadRequest, "only source drives can be scanned")
 		return
 	}
@@ -159,8 +162,8 @@ func (s *server) enqueueBackup(w http.ResponseWriter, r *http.Request, sourceID,
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if src.Role != db.RoleSource && src.Role != db.RoleBoth {
-		writeError(w, http.StatusBadRequest, "source drive must have role source or both")
+	if src.Role != db.RoleSource {
+		writeError(w, http.StatusBadRequest, "source drive must have role source")
 		return
 	}
 	dst, err := s.db.GetDrive(r.Context(), destID)
@@ -172,12 +175,41 @@ func (s *server) enqueueBackup(w http.ResponseWriter, r *http.Request, sourceID,
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if dst.Role != db.RoleDestination && dst.Role != db.RoleBoth {
-		writeError(w, http.StatusBadRequest, "destination drive must have role destination or both")
+	if dst.Role != db.RoleDestination {
+		writeError(w, http.StatusBadRequest, "destination drive must have role destination")
 		return
 	}
 	params, _ := json.Marshal(jobs.BackupParams{SourceDriveID: sourceID, DestDriveID: destID, MediaItemIDs: itemIDs})
 	s.createAndEnqueue(w, r, jobs.TypeBackup, params)
+}
+
+// enqueueImport validates the destination (must be an online destination drive)
+// and resolves the source, then creates+enqueues an import job.
+func (s *server) enqueueImport(w http.ResponseWriter, r *http.Request, destID, sourceID int64, verify bool) {
+	dst, err := s.db.GetDrive(r.Context(), destID)
+	if errors.Is(err, db.ErrDriveNotFound) {
+		writeError(w, http.StatusNotFound, "destination drive not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if dst.Role != db.RoleDestination {
+		writeError(w, http.StatusBadRequest, "drive must have role destination")
+		return
+	}
+	if !dst.Online || dst.LastMountPath == nil || *dst.LastMountPath == "" {
+		writeError(w, http.StatusBadRequest, "destination drive must be online to import from it")
+		return
+	}
+	src, err := s.resolveImportSource(r.Context(), sourceID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	params, _ := json.Marshal(jobs.ImportParams{DestDriveID: destID, SourceDriveID: src, Verify: verify})
+	s.createAndEnqueue(w, r, jobs.TypeImport, params)
 }
 
 func (s *server) createAndEnqueue(w http.ResponseWriter, r *http.Request, jobType string, params []byte) {

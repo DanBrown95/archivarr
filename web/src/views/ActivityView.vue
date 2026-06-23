@@ -36,6 +36,14 @@ function summary(job) {
   if (job.type === 'scan') {
     return `${s.new} new, ${s.changed} changed, ${s.missing} missing, ${s.hashed} hashed`
   }
+  if (job.type === 'import') {
+    let t = `imported ${s.imported}`
+    if (s.alreadyKnown) t += `, ${s.alreadyKnown} already known`
+    if (s.unmatched) t += `, ${s.unmatched} unmatched`
+    if (s.sizeMismatch) t += `, ${s.sizeMismatch} size mismatch`
+    if (s.hashMismatch) t += `, ${s.hashMismatch} hash mismatch`
+    return t
+  }
   return ''
 }
 

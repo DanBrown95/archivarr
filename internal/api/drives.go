@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/danbrown95/archivarr/internal/db"
 	"github.com/danbrown95/archivarr/internal/drive"
+	"github.com/danbrown95/archivarr/internal/util"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -79,6 +82,34 @@ func (s *server) getDrive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toDriveDTO(*d))
 }
 
+// overlappingDrive returns an existing drive of role `other` whose tracked path
+// overlaps p, or nil if none. It stops a source and a backup destination from
+// sharing a location (a "backup" on the source gives no protection).
+func (s *server) overlappingDrive(ctx context.Context, p string, other db.Role) (*db.Drive, error) {
+	drives, err := s.db.ListDrives(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range drives {
+		d := drives[i]
+		if d.Role != other {
+			continue
+		}
+		var dp string
+		if other == db.RoleSource {
+			if d.RootPath != nil {
+				dp = *d.RootPath
+			}
+		} else if d.LastMountPath != nil {
+			dp = *d.LastMountPath
+		}
+		if util.PathsOverlap(p, dp) {
+			return &d, nil
+		}
+	}
+	return nil, nil
+}
+
 type createDriveReq struct {
 	Label    string  `json:"label"`
 	Role     string  `json:"role"`
@@ -99,12 +130,24 @@ func (s *server) createDrive(w http.ResponseWriter, r *http.Request) {
 	}
 	role := db.Role(req.Role)
 	if !db.ValidRole(role) {
-		writeError(w, http.StatusBadRequest, "role must be source, destination, or both")
+		writeError(w, http.StatusBadRequest, "role must be source or destination")
 		return
 	}
 	if role != db.RoleDestination && (req.RootPath == nil || *req.RootPath == "") {
 		writeError(w, http.StatusBadRequest, "rootPath is required for source drives")
 		return
+	}
+
+	// A source must not share a location with a backup destination.
+	if role == db.RoleSource && req.RootPath != nil {
+		if c, err := s.overlappingDrive(r.Context(), *req.RootPath, db.RoleDestination); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		} else if c != nil {
+			writeError(w, http.StatusBadRequest,
+				fmt.Sprintf("path overlaps destination %q — a source and a backup destination can't share a location", c.Label))
+			return
+		}
 	}
 
 	d, err := s.db.CreateDrive(r.Context(), db.CreateDriveInput{
@@ -182,7 +225,7 @@ func (s *server) registerDrive(w http.ResponseWriter, r *http.Request) {
 	if req.Role != "" {
 		role = db.Role(req.Role)
 		if !db.ValidRole(role) {
-			writeError(w, http.StatusBadRequest, "role must be source, destination, or both")
+			writeError(w, http.StatusBadRequest, "role must be source or destination")
 			return
 		}
 	}
@@ -190,6 +233,16 @@ func (s *server) registerDrive(w http.ResponseWriter, r *http.Request) {
 	fi, err := os.Stat(req.Path)
 	if err != nil || !fi.IsDir() {
 		writeError(w, http.StatusBadRequest, "path is not an accessible directory")
+		return
+	}
+
+	// A backup destination must not share a location with a source.
+	if c, err := s.overlappingDrive(r.Context(), req.Path, db.RoleSource); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if c != nil {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("path overlaps source %q — a backup destination can't share a location with a source", c.Label))
 		return
 	}
 

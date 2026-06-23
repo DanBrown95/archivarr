@@ -10,8 +10,8 @@ const dialog = useDialog()
 const drives = ref([])
 const stats = ref(null)
 
-const sourceDrives = computed(() => drives.value.filter((d) => d.role === 'source' || d.role === 'both'))
-const destDrives = computed(() => drives.value.filter((d) => d.role === 'destination' || d.role === 'both'))
+const sourceDrives = computed(() => drives.value.filter((d) => d.role === 'source'))
+const destDrives = computed(() => drives.value.filter((d) => d.role === 'destination'))
 const driveOptions = (list) => list.map((d) => ({ label: d.label, value: d.id }))
 
 async function loadDrives() {

@@ -32,10 +32,11 @@ const drives = ref([])
 const loading = ref(false)
 
 const onlineDests = computed(() =>
-  drives.value.filter((d) => (d.role === 'destination' || d.role === 'both') && d.online),
+  drives.value.filter((d) => d.role === 'destination' && d.online),
 )
+const sources = computed(() => drives.value.filter((d) => d.role === 'source'))
 
-const roleType = { source: 'info', destination: 'success', both: 'warning' }
+const roleType = { source: 'info', destination: 'success' }
 const scanOptions = [
   { label: 'Scan (quick)', key: 'scan' },
   { label: 'Scan + hash', key: 'hash' },
@@ -59,7 +60,11 @@ async function load() {
 onMounted(load)
 
 function isSource(d) {
-  return d.role === 'source' || d.role === 'both'
+  return d.role === 'source'
+}
+
+function isDest(d) {
+  return d.role === 'destination'
 }
 
 async function onScan(d, key) {
@@ -84,6 +89,43 @@ async function onBackup(source, key) {
     router.push('/activity')
   } catch (e) {
     message.error(String(e))
+  }
+}
+
+/* ---- Import existing backups (scan a destination, register matches) ---- */
+const showImport = ref(false)
+const importTarget = ref(null)
+const importForm = ref({ sourceId: null, verify: false })
+const importing = ref(false)
+const sourceOptions = computed(() => sources.value.map((s) => ({ label: s.label, value: s.id })))
+
+function openImport(d) {
+  importTarget.value = d
+  // Default to the sole source if there's exactly one.
+  importForm.value = { sourceId: sources.value.length === 1 ? sources.value[0].id : null, verify: false }
+  showImport.value = true
+}
+
+async function submitImport() {
+  if (!importForm.value.sourceId) {
+    message.error('Choose which source these backups belong to')
+    return
+  }
+  importing.value = true
+  try {
+    const job = await api.createJob({
+      type: 'import',
+      destDriveId: importTarget.value.id,
+      sourceDriveId: importForm.value.sourceId,
+      verify: importForm.value.verify,
+    })
+    message.success(`Import queued (job #${job.id})`)
+    showImport.value = false
+    router.push('/activity')
+  } catch (e) {
+    message.error(String(e))
+  } finally {
+    importing.value = false
   }
 }
 
@@ -200,6 +242,9 @@ async function registerMount(m) {
                     <n-button size="small" type="primary">Back up ▾</n-button>
                   </n-dropdown>
                 </template>
+                <n-button v-if="isDest(d) && d.online" size="small" @click="openImport(d)">
+                  Import existing
+                </n-button>
                 <n-button size="small" quaternary type="error" @click="confirmRemove(d)">Remove</n-button>
               </div>
             </td>
@@ -207,6 +252,46 @@ async function registerMount(m) {
         </tbody>
       </n-table>
     </n-card>
+
+    <!-- Import existing backups modal -->
+    <n-modal
+      v-model:show="showImport"
+      preset="card"
+      :title="importTarget ? `Import existing backups — ${importTarget.label}` : 'Import existing backups'"
+      style="width: 520px"
+    >
+      <p class="muted" style="margin-top: 0">
+        Scans this destination and registers files that match a source's tracked media as
+        existing backups, so they aren't re-copied. Files with no match are reported, not added —
+        so add and scan the source first.
+      </p>
+      <n-alert v-if="!sourceOptions.length" type="warning" :bordered="false" style="margin-bottom: 12px">
+        No source drives yet — add and scan a source first so there's something to match against.
+      </n-alert>
+      <n-form label-placement="top">
+        <n-form-item label="These backups belong to source">
+          <n-select
+            v-model:value="importForm.sourceId"
+            :options="sourceOptions"
+            placeholder="Choose a source"
+          />
+        </n-form-item>
+        <n-form-item label="Verify with hashes">
+          <n-switch v-model:value="importForm.verify" />
+          <span class="muted" style="margin-left: 12px">
+            Slower — reads and hashes each file to confirm it matches the source. Off = match by path + size.
+          </span>
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showImport = false">Cancel</n-button>
+          <n-button type="primary" :loading="importing" :disabled="!sourceOptions.length" @click="submitImport">
+            Import
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
 
     <!-- Add source modal -->
     <n-modal v-model:show="showAdd" preset="card" title="Add source drive" style="width: 480px">

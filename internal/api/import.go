@@ -78,7 +78,7 @@ func (s *server) resolveImportSource(ctx context.Context, want int64) (int64, er
 		if err != nil {
 			return 0, fmt.Errorf("source drive #%d not found", want)
 		}
-		if d.Role != db.RoleSource && d.Role != db.RoleBoth {
+		if d.Role != db.RoleSource {
 			return 0, fmt.Errorf("drive %q is not a source", d.Label)
 		}
 		return d.ID, nil
@@ -90,7 +90,7 @@ func (s *server) resolveImportSource(ctx context.Context, want int64) (int64, er
 	}
 	var sources []db.Drive
 	for _, d := range drives {
-		if d.Role == db.RoleSource || d.Role == db.RoleBoth {
+		if d.Role == db.RoleSource {
 			sources = append(sources, d)
 		}
 	}

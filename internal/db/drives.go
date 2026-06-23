@@ -9,16 +9,19 @@ import (
 // Role describes how a drive is used.
 type Role string
 
+// A drive is either a source (media to protect) or a destination (receives
+// backups) — never both. A drive serving as its own backup target provides no
+// protection, so the two roles are kept distinct. (The DB CHECK still permits
+// the legacy 'both' value; it's simply never written.)
 const (
 	RoleSource      Role = "source"
 	RoleDestination Role = "destination"
-	RoleBoth        Role = "both"
 )
 
 // ValidRole reports whether r is a recognized role.
 func ValidRole(r Role) bool {
 	switch r {
-	case RoleSource, RoleDestination, RoleBoth:
+	case RoleSource, RoleDestination:
 		return true
 	}
 	return false

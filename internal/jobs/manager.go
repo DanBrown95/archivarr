@@ -14,6 +14,7 @@ import (
 
 	"github.com/danbrown95/archivarr/internal/backup"
 	"github.com/danbrown95/archivarr/internal/db"
+	"github.com/danbrown95/archivarr/internal/importer"
 	"github.com/danbrown95/archivarr/internal/pathfilter"
 	"github.com/danbrown95/archivarr/internal/scan"
 	"github.com/danbrown95/archivarr/internal/util"
@@ -23,6 +24,7 @@ import (
 const (
 	TypeScan   = "scan"
 	TypeBackup = "backup"
+	TypeImport = "import"
 )
 
 // ScanParams is the params_json payload for a scan job.
@@ -37,6 +39,14 @@ type BackupParams struct {
 	SourceDriveID int64   `json:"sourceDriveId"`
 	DestDriveID   int64   `json:"destDriveId"`
 	MediaItemIDs  []int64 `json:"mediaItemIds,omitempty"`
+}
+
+// ImportParams is the params_json payload for an import job: scan an existing
+// destination drive and register its files as backups of the given source.
+type ImportParams struct {
+	DestDriveID   int64 `json:"destDriveId"`
+	SourceDriveID int64 `json:"sourceDriveId"`
+	Verify        bool  `json:"verify"` // recompute hashes and confirm against the source
 }
 
 // Manager owns the queue and worker pool.
@@ -142,7 +152,7 @@ func (m *Manager) EnqueueSourceScans(ctx context.Context, hashOnScan bool, origi
 	}
 	var ids []int64
 	for _, d := range drives {
-		if d.Role != db.RoleSource && d.Role != db.RoleBoth {
+		if d.Role != db.RoleSource {
 			continue
 		}
 		params, _ := json.Marshal(ScanParams{DriveID: d.ID, HashOnScan: hashOnScan})
@@ -225,6 +235,8 @@ func (m *Manager) execute(parent context.Context, jobID int64) {
 		summary, runErr = m.runScan(jobCtx, job, prog)
 	case TypeBackup:
 		summary, runErr = m.runBackup(jobCtx, job, prog)
+	case TypeImport:
+		summary, runErr = m.runImport(jobCtx, job, prog)
 	default:
 		runErr = fmt.Errorf("unknown job type %q", job.Type)
 	}
@@ -335,6 +347,56 @@ func (m *Manager) runBackup(ctx context.Context, job *db.Job, prog backup.Progre
 		}
 	}
 	return summary, runErr
+}
+
+// runImport scans an existing destination drive and registers files that match
+// the source's tracked media items as backups (Mode A — filesystem match).
+func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progress) (string, error) {
+	var p ImportParams
+	if err := unmarshalParams(job, &p); err != nil {
+		return "", err
+	}
+	dest, err := m.db.GetDrive(ctx, p.DestDriveID)
+	if err != nil {
+		return "", fmt.Errorf("destination drive: %w", err)
+	}
+	if dest.LastMountPath == nil || *dest.LastMountPath == "" {
+		return "", fmt.Errorf("destination %q is not mounted", dest.Label)
+	}
+	source, err := m.db.GetDrive(ctx, p.SourceDriveID)
+	if err != nil {
+		return "", fmt.Errorf("source drive: %w", err)
+	}
+	if source.RootPath != nil && util.PathsOverlap(*source.RootPath, *dest.LastMountPath) {
+		return "", fmt.Errorf("destination %q and source %q share a location — refusing to import the source onto itself", dest.Label, source.Label)
+	}
+
+	// One writer per physical destination at a time, same as backups.
+	unlock := m.destLocks.Lock(dest.ID)
+	defer unlock()
+
+	settings, _ := m.db.GetAppSettings(ctx)
+	prog.OnLog(fmt.Sprintf("importing existing backups on %q, matching against source %q (verify=%v)",
+		dest.Label, source.Label, p.Verify))
+
+	st, err := importer.ImportDestinationFS(ctx, m.db, importer.FSOptions{
+		SourceDriveID: source.ID,
+		DestDriveID:   dest.ID,
+		DestRoot:      *dest.LastMountPath,
+		Verify:        p.Verify,
+		Exclude:       settings.ScanExclude,
+		IncludeExt:    settings.ScanIncludeExt,
+		OnProgress:    prog.OnProgress,
+		OnLog:         prog.OnLog,
+	})
+	if b, jerr := json.Marshal(st); jerr == nil {
+		_ = m.db.SetJobStats(ctx, job.ID, string(b))
+	}
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d imported, %d already known, %d unmatched, %d size mismatch",
+		st.Imported, st.AlreadyKnown, st.Unmatched, st.SizeMismatch), nil
 }
 
 func unmarshalParams(job *db.Job, v any) error {

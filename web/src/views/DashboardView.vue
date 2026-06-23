@@ -44,18 +44,18 @@ async function load() {
   }
 }
 
-const GeneralSetupInstructions = [
-  'Ensure your source and destination drives are connected to the system.',
-  'Add the source drive in the "Drives" page and mark it as a source drive.',
-  'Add the destination drive in the "Drives" page and mark it as a destination drive.',
-  'Modify the Include/Exclude patterns in the "Settings" page to specify which files to scan for / back up. (optional)',
-  'Run a scan on the source drive to detect files matching the Include/Exclude patterns.',
-  'Run a backup job to copy files from the source drive to the destination drive.',
+const setupSteps = [
+  { title: 'Connect your drives', desc: 'Plug in the drive that holds your media and the external drive(s) you back up to.' },
+  { title: 'Add your source', desc: 'On the Drives page, add a source pointing at your media folder (e.g. /mnt/Media).' },
+  { title: 'Register a destination', desc: 'On Drives, use Discover destinations, plug in a backup drive, and register it — Archivarr writes a small marker so it is recognized at any mount path.' },
+  { title: 'Tune what is tracked (optional)', desc: 'In Settings, adjust the include/exclude patterns to control which files are scanned and backed up.' },
+  { title: 'Scan the source', desc: 'Run a scan to index your media and detect what needs backing up.' },
+  { title: 'Back up', desc: 'Run a backup to copy everything not yet on a destination; it resumes on the next drive when one fills.' },
 ]
-const ImportDestinationInstructions = [
-  'Ensure your source and destination drives are connected to the system.',
-  'Ensure both the source and destination drives are created in the "Drives" page and marked as source and destination drives respectively.',
-  'Run an import job on the destination to log backed up files into the database and match them with the source drive files.',
+const importSteps = [
+  { title: 'Add and scan your source', desc: 'So there is something to match against — add the source on Drives, then run a scan.' },
+  { title: 'Register the backup drive', desc: 'On Drives, discover and register the existing backup drive as a destination.' },
+  { title: 'Import existing backups', desc: 'Use Import existing on that destination. Files on it that match your source — by path, or by content hash if the drive has an Archivarr snapshot — are recorded as backups so they are not re-copied. Unmatched files are reported, not added.' },
 ]
 
 onMounted(load)
@@ -117,28 +117,72 @@ onMounted(load)
       </n-gi>
     </n-grid>
 
-    <n-grid :cols="1" :x-gap="16" :y-gap="16" responsive="screen" item-responsive style="margin-top: 16px">
-      <n-gi span="1">
-        <n-card title="General Setup Instructions">
-          <span class="muted">Follow these steps to set up your source and destination drives for backup.</span>
-          <n-list>
-            <n-list-item v-for="(instruction, index) in GeneralSetupInstructions" :key="index">
-              {{ instruction }}
-            </n-list-item>
-          </n-list>
-        </n-card>
-      </n-gi>
-      <n-gi span="1">
-        <n-card title="Import Existing Destination Instructions">
-          <span class="muted">Follow these steps to import existing backed up files from your destination drive into the
-            database.</span>
-          <n-list>
-            <n-list-item v-for="(instruction, index) in ImportDestinationInstructions" :key="index">
-              {{ instruction }}
-            </n-list-item>
-          </n-list>
-        </n-card>
-      </n-gi>
-    </n-grid>
+    <n-card title="Getting started" style="margin-top: 16px">
+      <n-tabs type="segment" animated>
+        <n-tab-pane name="setup" tab="Set up backups">
+          <ol class="steps">
+            <li v-for="(s, i) in setupSteps" :key="i" class="step">
+              <div class="step-num">{{ i + 1 }}</div>
+              <div class="step-body">
+                <div class="step-title">{{ s.title }}</div>
+                <div class="step-desc muted">{{ s.desc }}</div>
+              </div>
+            </li>
+          </ol>
+        </n-tab-pane>
+        <n-tab-pane name="import" tab="Import an existing drive">
+          <ol class="steps">
+            <li v-for="(s, i) in importSteps" :key="i" class="step">
+              <div class="step-num">{{ i + 1 }}</div>
+              <div class="step-body">
+                <div class="step-title">{{ s.title }}</div>
+                <div class="step-desc muted">{{ s.desc }}</div>
+              </div>
+            </li>
+          </ol>
+        </n-tab-pane>
+      </n-tabs>
+    </n-card>
   </div>
 </template>
+
+<style scoped>
+.steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.step+.step {
+  border-top: 1px solid var(--code-border);
+}
+
+.step-num {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #3b82f6;
+}
+
+.step-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.step-desc {
+  font-size: 13px;
+  line-height: 1.45;
+}
+</style>

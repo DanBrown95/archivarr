@@ -54,7 +54,7 @@ func toDriveDTO(d db.Drive) driveDTO {
 func (s *server) listDrives(w http.ResponseWriter, r *http.Request) {
 	drives, err := s.db.ListDrives(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	out := make([]driveDTO, 0, len(drives))
@@ -76,7 +76,7 @@ func (s *server) getDrive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toDriveDTO(*d))
@@ -103,7 +103,7 @@ func (s *server) overlappingDrive(ctx context.Context, p string, other db.Role) 
 		} else if d.LastMountPath != nil {
 			dp = *d.LastMountPath
 		}
-		if util.PathsOverlap(p, dp) {
+		if util.PathsOverlap(util.ResolveSymlinks(p), util.ResolveSymlinks(dp)) {
 			return &d, nil
 		}
 	}
@@ -141,7 +141,7 @@ func (s *server) createDrive(w http.ResponseWriter, r *http.Request) {
 	// A source must not share a location with a backup destination.
 	if role == db.RoleSource && req.RootPath != nil {
 		if c, err := s.overlappingDrive(r.Context(), *req.RootPath, db.RoleDestination); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			s.serverError(w, r, "internal error", err)
 			return
 		} else if c != nil {
 			writeError(w, http.StatusBadRequest,
@@ -157,7 +157,7 @@ func (s *server) createDrive(w http.ResponseWriter, r *http.Request) {
 		Notes:    req.Notes,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toDriveDTO(*d))
@@ -179,7 +179,7 @@ type discoveredDTO struct {
 func (s *server) discoverDrives(w http.ResponseWriter, r *http.Request) {
 	found, err := s.scanner.Scan()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	out := make([]discoveredDTO, 0, len(found))
@@ -238,7 +238,7 @@ func (s *server) registerDrive(w http.ResponseWriter, r *http.Request) {
 
 	// A backup destination must not share a location with a source.
 	if c, err := s.overlappingDrive(r.Context(), req.Path, db.RoleSource); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	} else if c != nil {
 		writeError(w, http.StatusBadRequest,
@@ -262,7 +262,7 @@ func (s *server) registerDrive(w http.ResponseWriter, r *http.Request) {
 		MarkerID: &markerID,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
@@ -272,7 +272,7 @@ func (s *server) registerDrive(w http.ResponseWriter, r *http.Request) {
 
 	fresh, err := s.db.GetDrive(r.Context(), d.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toDriveDTO(*fresh))
@@ -288,6 +288,40 @@ func (s *server) scanDrive(w http.ResponseWriter, r *http.Request) {
 	}
 	hashOnScan := r.URL.Query().Get("hash") == "true" || r.URL.Query().Get("hash") == "1"
 	s.enqueueScan(w, r, id, hashOnScan)
+}
+
+// resolveImportSource picks the source drive an import attaches to: the given id
+// if it is a valid source, otherwise the sole source drive.
+func (s *server) resolveImportSource(ctx context.Context, want int64) (int64, error) {
+	if want != 0 {
+		d, err := s.db.GetDrive(ctx, want)
+		if err != nil {
+			return 0, fmt.Errorf("source drive #%d not found", want)
+		}
+		if d.Role != db.RoleSource {
+			return 0, fmt.Errorf("drive %q is not a source", d.Label)
+		}
+		return d.ID, nil
+	}
+
+	drives, err := s.db.ListDrives(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var sources []db.Drive
+	for _, d := range drives {
+		if d.Role == db.RoleSource {
+			sources = append(sources, d)
+		}
+	}
+	switch len(sources) {
+	case 0:
+		return 0, errors.New("no source drive exists — add and scan one first")
+	case 1:
+		return sources[0].ID, nil
+	default:
+		return 0, errors.New("multiple source drives exist — choose which one to import into")
+	}
 }
 
 func unixPtrToRFC3339(p *int64) *string {

@@ -12,7 +12,7 @@ import (
 func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	cfg, err := s.db.GetAppSettings(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -37,12 +37,12 @@ func (s *server) putSettings(w http.ResponseWriter, r *http.Request) {
 	// get existing settings to match against for changes that require a scan, then save the new settings to the DB
 	existing, err := s.db.GetAppSettings(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
 	if err := s.db.SaveAppSettings(r.Context(), cfg); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 

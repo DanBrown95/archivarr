@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { api } from '../api'
-import { formatBytes, formatTime, usedPercent } from '../util'
+import { cap, formatBytes, formatTime, usedPercent } from '../util'
 
 const router = useRouter()
 const message = useMessage()
@@ -13,7 +13,7 @@ function confirmRemove(d) {
   dialog.error({
     title: `Remove "${d.label}"`,
     content:
-      'Removes the drive and its tracking data from Archivarr (backup records; for a source, its media entries too). Files on physical drives are NOT touched.',
+      'Permanently removes this drive and its tracking data from Archivarr — backup records, and for a source its media entries. Files already on your physical drives are NOT touched.',
     positiveText: 'Remove',
     negativeText: 'Cancel',
     onPositiveClick: async () => {
@@ -212,10 +212,10 @@ async function registerMount(m) {
         <tbody>
           <tr v-for="d in drives" :key="d.id">
             <td>{{ d.label }}</td>
-            <td><n-tag size="small" :type="roleType[d.role] || 'default'">{{ d.role }}</n-tag></td>
+            <td><n-tag size="small" :type="roleType[d.role] || 'default'">{{ cap(d.role) }}</n-tag></td>
             <td>
               <n-tag size="small" :type="d.online ? 'success' : 'default'" :bordered="false">
-                {{ d.online ? 'online' : 'offline' }}
+                {{ d.online ? 'Online' : 'Offline' }}
               </n-tag>
             </td>
             <td class="mono muted">{{ d.rootPath || d.lastMountPath || '—' }}</td>

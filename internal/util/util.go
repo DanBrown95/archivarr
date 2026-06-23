@@ -4,6 +4,7 @@ package util
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -34,6 +35,20 @@ func PathsOverlap(a, b string) bool {
 		return true
 	}
 	return underDir(a, b) || underDir(b, a)
+}
+
+// ResolveSymlinks returns the canonical path with symlinks resolved, falling
+// back to the input if it can't be resolved (e.g. the path doesn't exist yet).
+// Used before PathsOverlap so a destination symlinked into a source (or vice
+// versa) is still detected as a loop.
+func ResolveSymlinks(p string) string {
+	if p == "" {
+		return p
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return p
 }
 
 // underDir reports whether child is inside parent.

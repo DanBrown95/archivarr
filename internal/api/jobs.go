@@ -50,7 +50,7 @@ func toJobDTO(j db.Job) jobDTO {
 func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 	list, err := s.db.ListJobs(r.Context(), 100)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	out := make([]jobDTO, 0, len(list))
@@ -72,7 +72,7 @@ func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toJobDTO(*j))
@@ -111,7 +111,7 @@ func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 func (s *server) clearQueuedJobs(w http.ResponseWriter, r *http.Request) {
 	n, err := s.jobs.ClearQueued(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"cancelled": n})
@@ -126,6 +126,9 @@ func (s *server) cancelJob(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.db.GetJob(r.Context(), id); errors.Is(err, db.ErrJobNotFound) {
 		writeError(w, http.StatusNotFound, "job not found")
 		return
+	} else if err != nil {
+		s.serverError(w, r, "load job", err)
+		return
 	}
 	s.jobs.Cancel(id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelling"})
@@ -139,7 +142,7 @@ func (s *server) enqueueScan(w http.ResponseWriter, r *http.Request, driveID int
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if d.Role != db.RoleSource {
@@ -159,11 +162,11 @@ func (s *server) enqueueBackup(w http.ResponseWriter, r *http.Request, sourceID,
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if src.Role != db.RoleSource {
-		writeError(w, http.StatusBadRequest, "source drive must have role source")
+		writeError(w, http.StatusBadRequest, "that drive isn't a source")
 		return
 	}
 	dst, err := s.db.GetDrive(r.Context(), destID)
@@ -172,11 +175,11 @@ func (s *server) enqueueBackup(w http.ResponseWriter, r *http.Request, sourceID,
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if dst.Role != db.RoleDestination {
-		writeError(w, http.StatusBadRequest, "destination drive must have role destination")
+		writeError(w, http.StatusBadRequest, "that drive isn't a destination")
 		return
 	}
 	params, _ := json.Marshal(jobs.BackupParams{SourceDriveID: sourceID, DestDriveID: destID, MediaItemIDs: itemIDs})
@@ -192,11 +195,11 @@ func (s *server) enqueueImport(w http.ResponseWriter, r *http.Request, destID, s
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if dst.Role != db.RoleDestination {
-		writeError(w, http.StatusBadRequest, "drive must have role destination")
+		writeError(w, http.StatusBadRequest, "that drive isn't a destination")
 		return
 	}
 	if !dst.Online || dst.LastMountPath == nil || *dst.LastMountPath == "" {
@@ -219,12 +222,12 @@ func (s *server) createAndEnqueue(w http.ResponseWriter, r *http.Request, jobTyp
 	// Jobs created via the API are user-initiated, so they run even while paused.
 	id, err := s.jobs.CreateAndEnqueue(r.Context(), jobType, &ps, db.JobOriginManual)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	j, err := s.db.GetJob(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusAccepted, toJobDTO(*j))

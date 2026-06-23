@@ -88,6 +88,20 @@ anything substantial before starting a PR.
 - [x] Apply include/exclude at backup time too (shared `pathfilter` rules)
 - [ ] Configurable logging / log retention (level + format configurable; DB job-log retention/pruning still TODO)
 
+## Scalability (deferred from the v1 audit — fine for typical libraries, revisit for very large ones)
+
+- [ ] Batch DB writes in scan/backup/import loops into transactions (single SQLite
+      connection currently does one fsync per file — slow at 100k+ files)
+- [ ] Preload a destination's existing backup keys into a set in the import loops
+      instead of a per-file `BackupExists` query (N+1)
+- [ ] Stream/chunk source items instead of loading whole `ListSourceItems` into
+      memory for very large libraries
+- [ ] Cheaper stats queries (replace per-row correlated `EXISTS` with a join/group)
+- [ ] `media_items.rel_path` search uses a leading-wildcard `LIKE` (full scan) —
+      consider FTS/prefix match if the Media search gets slow
+- [ ] (Optional) tighten the `drives.role` CHECK to drop the legacy `'both'` value,
+      and add `backups.media_item_id ON DELETE CASCADE` (both need a table rebuild)
+
 ---
 
 _Have an idea or want to pick something up? Open an issue._

@@ -40,27 +40,27 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 
 	totals, err := s.db.MediaTotals(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	sourceStats, err := s.db.PerSourceStats(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	destStats, err := s.db.PerDestinationStats(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	drives, err := s.db.ListDrives(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	lastScanAt, err := s.db.LastScanAt(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 

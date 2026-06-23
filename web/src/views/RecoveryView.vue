@@ -72,9 +72,9 @@ function confirmRemove(list) {
     return
   }
   dialog.error({
-    title: `Remove drive "${d.label}"`,
+    title: `Remove "${d.label}"`,
     content:
-      'This permanently removes the drive and its tracking data from Archivarr (backup records, and for a source its media entries). Files already on physical drives are NOT touched. Continue?',
+      'Permanently removes this drive and its tracking data from Archivarr — backup records, and for a source its media entries. Files already on your physical drives are NOT touched.',
     positiveText: 'Remove',
     negativeText: 'Cancel',
     onPositiveClick: async () => {

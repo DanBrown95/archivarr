@@ -55,12 +55,12 @@ func (s *server) listMedia(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	total, err := s.db.CountMedia(ctx, f)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	items, err := s.db.ListMediaPage(ctx, f)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
@@ -70,13 +70,13 @@ func (s *server) listMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	backups, err := s.db.BackupsForItems(ctx, ids)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
 	labels, err := s.driveLabels(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 

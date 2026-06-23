@@ -148,11 +148,24 @@ func ImportDestinationSnapshot(ctx context.Context, d *db.DB, opts SnapshotOptio
 	}
 	byRel := make(map[string]db.MediaItem, len(items))
 	byHash := make(map[string]db.MediaItem, len(items))
+	ambiguousHash := make(map[string]bool)
 	for _, m := range items {
 		byRel[m.RelPath] = m
-		if m.ContentHash != nil && *m.ContentHash != "" {
-			byHash[*m.ContentHash] = m
+		if m.ContentHash == nil || *m.ContentHash == "" {
+			continue
 		}
+		h := *m.ContentHash
+		if ambiguousHash[h] {
+			continue
+		}
+		if _, dup := byHash[h]; dup {
+			// Two source files share this content — a hash match would be
+			// ambiguous, so exclude it (path matching still applies).
+			delete(byHash, h)
+			ambiguousHash[h] = true
+			continue
+		}
+		byHash[h] = m
 	}
 
 	for i, r := range records {

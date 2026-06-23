@@ -341,7 +341,8 @@ func (m *Manager) runBackup(ctx context.Context, job *db.Job, prog backup.Progre
 		if b, err := json.Marshal(stats); err == nil {
 			_ = m.db.SetJobStats(ctx, job.ID, string(b))
 		}
-		summary = fmt.Sprintf("copied %d, failed %d, %s", stats.Copied, stats.Failed, util.Bytes(stats.Bytes))
+		summary = fmt.Sprintf("copied %d, adopted %d, conflicts %d, failed %d, %s",
+			stats.Copied, stats.Adopted, stats.Conflicts, stats.Failed, util.Bytes(stats.Bytes))
 		if stats.StoppedFull {
 			summary += fmt.Sprintf(", destination full (%d remaining)", stats.Remaining)
 		}
@@ -374,7 +375,7 @@ func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progre
 	if err != nil {
 		return "", fmt.Errorf("source drive: %w", err)
 	}
-	if source.RootPath != nil && util.PathsOverlap(*source.RootPath, destRoot) {
+	if source.RootPath != nil && util.PathsOverlap(util.ResolveSymlinks(*source.RootPath), util.ResolveSymlinks(destRoot)) {
 		return "", fmt.Errorf("destination %q and source %q share a location — refusing to import the source onto itself", dest.Label, source.Label)
 	}
 

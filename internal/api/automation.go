@@ -14,7 +14,7 @@ type automationDTO struct {
 func (s *server) automationState(w http.ResponseWriter, r *http.Request) {
 	paused, until, err := s.db.AutomationPaused(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, automationDTO{Paused: paused, PausedUntil: unixPtrToRFC3339(until)})
@@ -39,7 +39,7 @@ func (s *server) pauseAutomation(w http.ResponseWriter, r *http.Request) {
 		until = &u
 	}
 	if err := s.db.PauseAutomation(r.Context(), until); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	s.automationState(w, r)
@@ -47,7 +47,7 @@ func (s *server) pauseAutomation(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) resumeAutomation(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.ResumeAutomation(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	s.automationState(w, r)

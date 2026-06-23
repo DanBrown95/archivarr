@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
-import { formatBytes, formatTime } from '../util'
+import { cap, formatBytes, formatTime } from '../util'
 
 const router = useRouter()
 const drives = ref([])
@@ -107,9 +107,9 @@ onMounted(load)
           <n-list v-else>
             <n-list-item v-for="j in recentJobs" :key="j.id">
               <n-space align="center" justify="space-between" style="width: 100%">
-                <span><n-tag size="small" :bordered="false">{{ j.type }}</n-tag> #{{ j.id }}</span>
+                <span><n-tag size="small" :bordered="false">{{ cap(j.type) }}</n-tag> #{{ j.id }}</span>
                 <span class="muted">{{ formatTime(j.finishedAt || j.createdAt) }}</span>
-                <n-tag size="small" :type="statusType[j.status] || 'default'">{{ j.status }}</n-tag>
+                <n-tag size="small" :type="statusType[j.status] || 'default'">{{ cap(j.status) }}</n-tag>
               </n-space>
             </n-list-item>
           </n-list>

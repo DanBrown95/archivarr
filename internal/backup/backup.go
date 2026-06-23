@@ -19,6 +19,8 @@ const MetaDirName = "_backup_meta"
 type Stats struct {
 	Total       int   `json:"total"`
 	Copied      int   `json:"copied"`
+	Adopted     int   `json:"adopted"`   // already on dest with matching content; recorded, not copied
+	Conflicts   int   `json:"conflicts"` // a different file already exists at the path; left untouched
 	Failed      int   `json:"failed"`
 	Bytes       int64 `json:"bytes"`
 	StoppedFull bool  `json:"stoppedFull"`
@@ -69,7 +71,7 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 		return nil, fmt.Errorf("destination drive %d is not mounted", dest.ID)
 	}
 	srcRoot, destRoot := *source.RootPath, *dest.LastMountPath
-	if util.PathsOverlap(srcRoot, destRoot) {
+	if util.PathsOverlap(util.ResolveSymlinks(srcRoot), util.ResolveSymlinks(destRoot)) {
 		return nil, fmt.Errorf("source %q and destination %q share a location — refusing to back up onto the source", srcRoot, destRoot)
 	}
 	if fi, err := os.Stat(srcRoot); err != nil || !fi.IsDir() {
@@ -142,6 +144,28 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 		srcPath := filepath.Join(srcRoot, filepath.FromSlash(item.RelPath))
 		destPath := filepath.Join(destRoot, filepath.FromSlash(item.RelPath))
 
+		// Never overwrite a file Archivarr didn't put there. If something already
+		// exists at the destination path (a manual copy, another tool, or a
+		// leftover from an interrupted run), compare content: adopt it if it
+		// matches the source, otherwise leave it untouched and report a conflict.
+		if existing, serr := os.Stat(destPath); serr == nil && !existing.IsDir() {
+			adopted, herr := r.adoptExisting(ctx, item, srcPath, destPath, dest.ID, time.Now().Unix())
+			if herr != nil {
+				stats.Failed++
+				prog.logf("could not check existing file %s: %v", item.RelPath, herr)
+				continue
+			}
+			if adopted {
+				stats.Adopted++
+				prog.logf("already present and matching %s — recorded without copying", item.RelPath)
+			} else {
+				stats.Conflicts++
+				prog.logf("a different file already exists at %s — left untouched (run Import to reconcile)", item.RelPath)
+			}
+			prog.progress(i+1, len(pending))
+			continue
+		}
+
 		hashHex, size, cerr := CopyFile(srcPath, destPath)
 		if cerr != nil {
 			stats.Failed++
@@ -191,8 +215,49 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 		prog.logf("wrote DB snapshot to %s", filepath.Join(destRoot, MetaDirName))
 	}
 
-	prog.logf("backup done: copied %d, failed %d, %s", stats.Copied, stats.Failed, util.Bytes(stats.Bytes))
+	prog.logf("backup done: copied %d, adopted %d, conflicts %d, failed %d, %s",
+		stats.Copied, stats.Adopted, stats.Conflicts, stats.Failed, util.Bytes(stats.Bytes))
 	return stats, nil
+}
+
+// adoptExisting records an existing destination file as a backup when its
+// content matches the source (so it isn't re-copied), or returns false if the
+// content differs (a conflict — the caller leaves the file untouched). It never
+// writes to or deletes the destination file.
+func (r *Runner) adoptExisting(ctx context.Context, item db.MediaItem, srcPath, destPath string, destID, now int64) (bool, error) {
+	destHash, err := hash.File(destPath)
+	if err != nil {
+		return false, err
+	}
+	srcHash := ""
+	if item.ContentHash != nil && *item.ContentHash != "" {
+		srcHash = *item.ContentHash
+	} else {
+		h, herr := hash.File(srcPath)
+		if herr != nil {
+			return false, herr
+		}
+		srcHash = h
+		_ = r.DB.SetMediaItemHash(ctx, item.ID, h, hash.Algo)
+	}
+	if destHash != srcHash {
+		return false, nil // different content — conflict
+	}
+	info, err := os.Stat(destPath)
+	if err != nil {
+		return false, err
+	}
+	_, err = r.DB.InsertBackup(ctx, db.InsertBackupInput{
+		MediaItemID: item.ID,
+		DestDriveID: destID,
+		DestRelPath: item.RelPath,
+		Size:        info.Size(),
+		Status:      "ok",
+		VerifyHash:  &destHash,
+		VerifiedAt:  &now,
+		CopiedAt:    now,
+	})
+	return err == nil, err
 }
 
 func (r *Runner) copyDBMeta(ctx context.Context, destRoot string) error {

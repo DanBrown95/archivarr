@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { api } from '../api'
-import { formatTime } from '../util'
+import { cap, formatTime } from '../util'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -29,6 +29,8 @@ function summary(job) {
   if (!s) return ''
   if (job.type === 'backup') {
     let t = `copied ${s.copied}/${s.total}`
+    if (s.adopted) t += `, ${s.adopted} adopted`
+    if (s.conflicts) t += `, ${s.conflicts} conflicts`
     if (s.failed) t += `, ${s.failed} failed`
     if (s.stoppedFull) t += ' (destination full)'
     return t
@@ -105,7 +107,7 @@ onUnmounted(() => clearInterval(timer))
     <n-space justify="space-between" align="center" style="margin-bottom: 12px">
       <div>
         <h1 class="page-title">Activity</h1>
-        <p class="page-subtitle" style="margin: 0">Background jobs — scans and backups.</p>
+        <p class="page-subtitle" style="margin: 0">Background jobs — scans, backups, and imports.</p>
       </div>
       <n-space>
         <n-button v-if="queuedCount" type="error" ghost @click="confirmClearQueue">
@@ -133,13 +135,13 @@ onUnmounted(() => clearInterval(timer))
         <tbody>
           <tr v-for="j in jobs" :key="j.id">
             <td>{{ j.id }}</td>
-            <td><n-tag size="small" :bordered="false">{{ j.type }}</n-tag></td>
+            <td><n-tag size="small" :bordered="false">{{ cap(j.type) }}</n-tag></td>
             <td>
               <n-tag size="small" :bordered="false" :type="j.origin === 'auto' ? 'info' : 'default'">
                 {{ originLabel(j.origin) }}
               </n-tag>
             </td>
-            <td><n-tag size="small" :type="statusType[j.status] || 'default'">{{ j.status }}</n-tag></td>
+            <td><n-tag size="small" :type="statusType[j.status] || 'default'">{{ cap(j.status) }}</n-tag></td>
             <td>
               <n-progress
                 v-if="j.status === 'running'"
@@ -175,7 +177,7 @@ onUnmounted(() => clearInterval(timer))
       <n-drawer-content v-if="selected" :title="`Job #${selected.id} — ${selected.type}`" closable>
         <n-space vertical>
           <div>
-            <n-tag size="small" :type="statusType[selected.status] || 'default'">{{ selected.status }}</n-tag>
+            <n-tag size="small" :type="statusType[selected.status] || 'default'">{{ cap(selected.status) }}</n-tag>
           </div>
           <div v-if="summary(selected)" class="muted">{{ summary(selected) }}</div>
           <n-divider title-placement="left" style="margin: 8px 0">Log</n-divider>

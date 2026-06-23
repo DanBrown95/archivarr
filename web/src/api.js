@@ -68,8 +68,6 @@ export const api = {
   getSettings: () => req('GET', '/settings'),
   saveSettings: (b) => req('PUT', '/settings', b),
 
-  importLegacy: (b) => req('POST', '/import', b),
-
   jobs: () => req('GET', '/jobs'),
   job: (id) => req('GET', `/jobs/${id}`),
   createJob: (b) => req('POST', '/jobs', b),

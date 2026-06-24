@@ -190,4 +190,3 @@ future option without a migration.
 - **Timestamps stored as unix seconds (INTEGER)** for driver-agnostic scanning;
   the API converts to RFC3339.
 - **Embedded frontend** (`go:embed`) — one artifact to ship and run.
-- **Linux-only** — `DiskUsage` uses `syscall.Statfs`; develop/test via Docker.

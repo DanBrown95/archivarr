@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/backend-Go-00ADD8?logo=go&logoColor=white" alt="Backend: Go" />
   <img src="https://img.shields.io/badge/frontend-Vue%203-42b883?logo=vuedotjs&logoColor=white" alt="Frontend: Vue 3" />
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
-  <img src="https://img.shields.io/badge/license-TBD-lightgrey" alt="License: TBD" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
 </p>
 
 Archivarr is a self-hosted, *arr-style backup tracker for large media libraries.
@@ -154,4 +154,4 @@ anything substantial before a large PR.
 
 ## License
 
-_TBD — a license will be added before/at the first tagged release._
+Released under the [MIT License](LICENSE).

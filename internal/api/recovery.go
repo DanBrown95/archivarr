@@ -54,13 +54,13 @@ func (s *server) sourceRecovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
 	items, err := s.db.ListSourceItems(ctx, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	ids := make([]int64, len(items))
@@ -69,7 +69,7 @@ func (s *server) sourceRecovery(w http.ResponseWriter, r *http.Request) {
 	}
 	backups, err := s.db.BackupsForItems(ctx, ids)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
@@ -132,22 +132,25 @@ func (s *server) destinationRequeue(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.db.GetDrive(ctx, id); errors.Is(err, db.ErrDriveNotFound) {
 		writeError(w, http.StatusNotFound, "drive not found")
 		return
+	} else if err != nil {
+		s.serverError(w, r, "load drive", err)
+		return
 	}
 
 	breakdown, err := s.db.DestContentsBySource(ctx, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	labels, err := s.driveLabels(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
 	removed, err := s.db.DeleteBackupsForDest(ctx, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
@@ -180,9 +183,12 @@ func (s *server) deleteDrive(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.db.GetDrive(ctx, id); errors.Is(err, db.ErrDriveNotFound) {
 		writeError(w, http.StatusNotFound, "drive not found")
 		return
+	} else if err != nil {
+		s.serverError(w, r, "load drive", err)
+		return
 	}
 	if err := s.db.DeleteDrive(ctx, id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})

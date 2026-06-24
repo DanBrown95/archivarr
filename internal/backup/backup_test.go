@@ -11,6 +11,7 @@ import (
 	"github.com/danbrown95/archivarr/internal/hash"
 	"github.com/danbrown95/archivarr/internal/pathfilter"
 	"github.com/danbrown95/archivarr/internal/scan"
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
 func TestCopyFileIntegrity(t *testing.T) {
@@ -124,7 +125,7 @@ func TestRunBackupCopiesVerifiesRecords(t *testing.T) {
 	}
 
 	// DB snapshot written to the destination.
-	if _, err := os.Stat(filepath.Join(destRoot, backup.MetaDirName, "archivarr.db")); err != nil {
+	if _, err := os.Stat(filepath.Join(destRoot, util.MetaDirName, util.SnapshotName)); err != nil {
 		t.Fatalf("expected DB snapshot on destination: %v", err)
 	}
 
@@ -194,6 +195,43 @@ func TestRunBackupRespectsFilter(t *testing.T) {
 	pending, _ := database.ListPendingForBackup(ctx, source.ID)
 	if len(pending) != 1 || pending[0].RelPath != "Movies/b.mkv" {
 		t.Fatalf("expected only Movies/b.mkv pending, got %+v", pending)
+	}
+}
+
+func TestRunBackupAdoptsMatchAndSkipsConflict(t *testing.T) {
+	ctx := context.Background()
+	runner, database, source, dest, _, destRoot := harness(t)
+
+	// Pre-place files on the destination BEFORE backup runs:
+	//   Movies/a.mkv — identical to the source → should be ADOPTED (recorded, not rewritten)
+	//   Movies/b.mkv — different from the source → CONFLICT (left untouched, not backed up)
+	write(t, filepath.Join(destRoot, "Movies", "a.mkv"), "movie a data")        // matches source
+	write(t, filepath.Join(destRoot, "Movies", "b.mkv"), "DO NOT OVERWRITE ME") // differs from source
+
+	stats, err := runner.RunBackup(ctx, source, dest, nil, nil, backup.Progress{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Adopted != 1 || stats.Conflicts != 1 || stats.Copied != 0 {
+		t.Fatalf("stats = %+v; want Adopted=1 Conflicts=1 Copied=0", stats)
+	}
+
+	// The conflicting file must be byte-for-byte untouched.
+	got, _ := os.ReadFile(filepath.Join(destRoot, "Movies", "b.mkv"))
+	if string(got) != "DO NOT OVERWRITE ME" {
+		t.Fatalf("conflict file was overwritten: %q", got)
+	}
+
+	// a.mkv adopted → backup recorded; b.mkv conflict → no record (still pending).
+	items, _ := database.ListSourceItems(ctx, source.ID)
+	for _, m := range items {
+		ok, _ := database.BackupExists(ctx, m.ID, dest.ID)
+		if m.RelPath == "Movies/a.mkv" && !ok {
+			t.Fatal("a.mkv should have been adopted (backup recorded)")
+		}
+		if m.RelPath == "Movies/b.mkv" && ok {
+			t.Fatal("b.mkv conflict must NOT have a backup record")
+		}
 	}
 }
 

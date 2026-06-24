@@ -28,3 +28,7 @@ DESIGN.md
 .DS_Store
 .idea/
 .vscode/
+
+# Claude Code
+.claude/
+**/.claude/

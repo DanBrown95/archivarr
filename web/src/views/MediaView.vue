@@ -42,6 +42,11 @@ const backedPct = computed(() => {
   return Math.round((t.backedFiles / t.files) * 100)
 })
 
+// Whether any filter/search is narrowing the list (drives the empty-state copy).
+const filtersActive = computed(
+  () => !!search.value || statusFilter.value !== 'all' || sourceFilter.value !== null,
+)
+
 async function loadStats() {
   try {
     stats.value = await api.stats()
@@ -104,7 +109,7 @@ async function scanSources() {
     }
     await Promise.all([loadStats(), loadMedia()])
     if (timedOut) {
-      message.warning('Scan still running (is automation paused?). It will appear once it finishes — hit Refresh.')
+      message.warning('Scan is still running in the background. Select Refresh to see results once it finishes.')
     } else {
       message.success('Scan complete')
     }
@@ -167,8 +172,18 @@ onMounted(() => {
         </p>
       </div>
       <n-space>
-        <n-button type="primary" :loading="scanning" @click="scanSources">Scan sources</n-button>
-        <n-button quaternary :loading="loadingMedia" @click="refresh">Refresh</n-button>
+        <n-tooltip>
+          <template #trigger>
+            <n-button type="primary" :loading="scanning" @click="scanSources">Scan sources</n-button>
+          </template>
+          Re-read your source drives from disk to pick up new, changed, or removed files.
+        </n-tooltip>
+        <n-tooltip>
+          <template #trigger>
+            <n-button quaternary :loading="loadingMedia" @click="refresh">Refresh</n-button>
+          </template>
+          Reload this list from the database (fast — doesn't read the disk).
+        </n-tooltip>
       </n-space>
     </n-space>
 
@@ -212,7 +227,14 @@ onMounted(() => {
           </n-space>
 
           <n-spin :show="loadingMedia">
-            <n-empty v-if="!media.items.length" description="No matching media." />
+            <n-empty
+              v-if="!media.items.length"
+              :description="
+                filtersActive
+                  ? 'No media matches your filters.'
+                  : 'No media tracked yet — add a source on the Drives page, then run Scan sources.'
+              "
+            />
             <n-table v-else :bordered="false" :single-line="false">
               <thead>
                 <tr>
@@ -232,7 +254,7 @@ onMounted(() => {
                   <td class="muted">{{ m.sourceLabel || '—' }}</td>
                   <td>
                     <n-tag size="small" :type="m.backedUp ? 'success' : 'warning'" :bordered="false">
-                      {{ m.backedUp ? 'backed up' : 'not backed up' }}
+                      {{ m.backedUp ? 'Backed up' : 'Not backed up' }}
                     </n-tag>
                   </td>
                   <td>

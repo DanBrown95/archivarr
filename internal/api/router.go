@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"path"
 	"strings"
@@ -56,6 +57,10 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 
 	r.Route("/api", func(r chi.Router) {
+		// Cap request bodies so a malicious/buggy client can't exhaust memory
+		// (the public /auth/* endpoints decode JSON without auth).
+		r.Use(maxBodyBytes(1 << 20)) // 1 MiB
+
 		// Public endpoints: health plus the auth bootstrap (status/setup/login).
 		r.Get("/health", s.health)
 		r.Route("/auth", func(r chi.Router) {
@@ -113,8 +118,6 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/", s.getSettings)
 				r.Put("/", s.putSettings)
 			})
-
-			r.Post("/import", s.importLegacy)
 		})
 	})
 
@@ -122,6 +125,16 @@ func NewRouter(d Deps) http.Handler {
 	r.Handle("/*", spaHandler(d.Assets))
 
 	return r
+}
+
+// maxBodyBytes caps the size of request bodies handled downstream.
+func maxBodyBytes(n int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, n)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -171,4 +184,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// serverError logs an unexpected internal error and returns a generic 500, so
+// raw error detail (SQL, filesystem paths) is never leaked to clients.
+func (s *server) serverError(w http.ResponseWriter, r *http.Request, msg string, err error) {
+	slog.Error(msg, "err", err, "method", r.Method, "path", r.URL.Path)
+	writeError(w, http.StatusInternalServerError, "internal server error")
 }

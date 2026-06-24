@@ -30,7 +30,7 @@ Linux/WSL environment (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 | --- | --- |
 | **Source** | A library you want protected (e.g. your media folder), identified by its configured root path. Always-on. |
 | **Destination** | A rotating external drive that receives backup copies, identified by a marker file so it's recognized at any mount path. |
-| **Drive** | A `source`, `destination`, or `both`. Exists in the DB whether or not it's currently mounted. |
+| **Drive** | A `source` or a `destination` (never both — a drive can't safely back up to itself). Exists in the DB whether or not it's currently mounted. |
 | **Media item** | A file on a source: path (relative to the source root), size, mtime, and an optional content hash. |
 | **Backup** | A record that a media item was copied to a destination drive, with a verification hash and timestamp. |
 | **Job** | A unit of background work (scan / backup) with progress, a log, and a status. |
@@ -40,7 +40,7 @@ Linux/WSL environment (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 Mount paths are unstable (`/mnt/usb1` today, `/mnt/usb3` tomorrow), so Archivarr
 does **not** identify drives by path:
 
-- **Destinations** get a small marker file (`.archivarr-drive-id`) written to
+- **Destinations** get a small marker file (`.archivarr/drive-id`) written to
   their root. The drive is recognized by that id wherever it mounts.
 - **Sources** are identified by their configured root path (always-on).
 
@@ -52,7 +52,7 @@ but never required.
 ## Data model (SQLite)
 
 ```
-drives        id, label, role(source|destination|both),
+drives        id, label, role(source|destination),
               marker_id (destination identity), root_path (source identity),
               fs_uuid (metadata), last_mount_path, capacity_bytes, free_bytes,
               online, last_seen_at, notes, created_at
@@ -125,7 +125,7 @@ requested.
 4. Record the `backups` row (with the verification hash).
 5. When the destination fills, stop cleanly with remaining-count info (resume on
    the next drive).
-6. Write a snapshot of the tracking DB to `<dest>/_backup_meta/archivarr.db` so a
+6. Write a snapshot of the tracking DB to `<dest>/.archivarr/archivarr.db` so a
    backup is self-describing even if the database/source is lost.
 
 ## Jobs, scheduling, and pause
@@ -190,4 +190,3 @@ future option without a migration.
 - **Timestamps stored as unix seconds (INTEGER)** for driver-agnostic scanning;
   the API converts to RFC3339.
 - **Embedded frontend** (`go:embed`) — one artifact to ship and run.
-- **Linux-only** — `DiskUsage` uses `syscall.Statfs`; develop/test via Docker.

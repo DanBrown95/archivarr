@@ -177,7 +177,7 @@ func (s *server) startSession(w http.ResponseWriter, r *http.Request, userID int
 func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 	count, err := s.db.UserCount(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	resp := map[string]any{
@@ -202,7 +202,7 @@ type credentialsRequest struct {
 func (s *server) setup(w http.ResponseWriter, r *http.Request) {
 	count, err := s.db.UserCount(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if count > 0 {
@@ -228,7 +228,7 @@ func (s *server) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := s.db.CreateUser(r.Context(), req.Username, hash)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if err := s.startSession(w, r, u.ID); err != nil {
@@ -330,14 +330,14 @@ func (s *server) updateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.db.UpdateUserCredentials(r.Context(), u.ID, newUsername, newHash); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 
 	// Invalidate every session (including this one), then re-issue a fresh
 	// session so the current browser stays logged in but old cookies die.
 	if err := s.db.DeleteUserSessions(r.Context(), u.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	if err := s.startSession(w, r, u.ID); err != nil {
@@ -413,7 +413,7 @@ func (s *server) requireAuthOrKey(next http.Handler) http.Handler {
 		if provided := extractAPIKey(r); provided != "" {
 			stored, _, err := s.db.GetSetting(r.Context(), settingAPIKey)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
+				s.serverError(w, r, "internal error", err)
 				return
 			}
 			if stored != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(stored)) == 1 {
@@ -437,7 +437,7 @@ func (s *server) requireAuthOrKey(next http.Handler) http.Handler {
 func (s *server) getAPIKey(w http.ResponseWriter, r *http.Request) {
 	key, err := s.ensureAPIKey(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"apiKey": key})
@@ -451,7 +451,7 @@ func (s *server) regenerateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.db.SetSetting(r.Context(), settingAPIKey, key); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		s.serverError(w, r, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"apiKey": key})
@@ -514,6 +514,16 @@ func (l *loginLimiter) fail(ip string) {
 		e.blockUntil = now.Add(loginBlock)
 		e.failures = 0
 		e.windowEnds = now.Add(loginBlock)
+	}
+
+	// Opportunistically evict expired entries so an attacker rotating IPs can't
+	// grow the map without bound.
+	if len(l.entries) > 256 {
+		for k, v := range l.entries {
+			if now.After(v.windowEnds) && now.After(v.blockUntil) {
+				delete(l.entries, k)
+			}
+		}
 	}
 }
 

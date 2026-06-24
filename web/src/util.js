@@ -17,6 +17,12 @@ export function usedPercent(free, capacity) {
   return Math.max(0, Math.min(100, Math.round(((capacity - free) / capacity) * 100)))
 }
 
+// cap capitalizes the first letter — for displaying raw enum values (roles,
+// statuses, job types) as Title-case labels.
+export function cap(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
+
 export function formatTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)

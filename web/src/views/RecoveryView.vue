@@ -10,8 +10,8 @@ const dialog = useDialog()
 const drives = ref([])
 const stats = ref(null)
 
-const sourceDrives = computed(() => drives.value.filter((d) => d.role === 'source' || d.role === 'both'))
-const destDrives = computed(() => drives.value.filter((d) => d.role === 'destination' || d.role === 'both'))
+const sourceDrives = computed(() => drives.value.filter((d) => d.role === 'source'))
+const destDrives = computed(() => drives.value.filter((d) => d.role === 'destination'))
 const driveOptions = (list) => list.map((d) => ({ label: d.label, value: d.id }))
 
 async function loadDrives() {
@@ -72,9 +72,9 @@ function confirmRemove(list) {
     return
   }
   dialog.error({
-    title: `Remove drive "${d.label}"`,
+    title: `Remove "${d.label}"`,
     content:
-      'This permanently removes the drive and its tracking data from Archivarr (backup records, and for a source its media entries). Files already on physical drives are NOT touched. Continue?',
+      'Permanently removes this drive and its tracking data from Archivarr — backup records, and for a source its media entries. Files already on your physical drives are NOT touched.',
     positiveText: 'Remove',
     negativeText: 'Cancel',
     onPositiveClick: async () => {

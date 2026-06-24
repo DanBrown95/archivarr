@@ -42,6 +42,7 @@ function summary(job) {
     let t = `imported ${s.imported}`
     if (s.alreadyKnown) t += `, ${s.alreadyKnown} already known`
     if (s.unmatched) t += `, ${s.unmatched} unmatched`
+    if (s.missing) t += `, ${s.missing} missing from drive`
     if (s.sizeMismatch) t += `, ${s.sizeMismatch} size mismatch`
     if (s.hashMismatch) t += `, ${s.hashMismatch} hash mismatch`
     return t

@@ -393,6 +393,7 @@ func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progre
 		prog.OnLog(fmt.Sprintf("found Archivarr snapshot on %q — matching recorded backups against source %q", dest.Label, source.Label))
 		st, err := importer.ImportDestinationSnapshot(ctx, m.db, importer.SnapshotOptions{
 			SnapshotPath:  importer.SnapshotPath(destRoot),
+			DestRoot:      destRoot,
 			DestDriveID:   dest.ID,
 			DestMarkerID:  marker,
 			SourceDriveID: source.ID,
@@ -405,8 +406,8 @@ func (m *Manager) runImport(ctx context.Context, job *db.Job, prog backup.Progre
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("snapshot: %d imported (%d by hash), %d already known, %d unmatched",
-			st.Imported, st.MatchedByHash, st.AlreadyKnown, st.Unmatched), nil
+		return fmt.Sprintf("snapshot: %d imported (%d by hash), %d already known, %d unmatched, %d missing from drive",
+			st.Imported, st.MatchedByHash, st.AlreadyKnown, st.Unmatched, st.Missing), nil
 	}
 
 	// Filesystem match: a foreign/manual drive — walk it and match files against the source.

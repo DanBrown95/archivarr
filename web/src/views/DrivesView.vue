@@ -266,6 +266,11 @@ async function registerMount(m) {
         (e.g. from an Archivarr snapshot, which survives a reorganized source). Files that don't
         match the source are reported, not added; nothing is created.
       </p>
+      <p class="muted" style="margin-top: 0; font-size: 12px">
+        Tip: let Archivarr manage the layout — don't move, rename, or delete files (or the
+        <span class="mono">_backup_meta</span> folder) on a backup drive yourself, or it can lose
+        track of what's stored where.
+      </p>
       <n-alert v-if="!sourceOptions.length" type="warning" :bordered="false" style="margin-bottom: 12px">
         No source drives yet — add and scan a source first so there's something to match against.
       </n-alert>

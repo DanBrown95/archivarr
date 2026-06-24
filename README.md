@@ -102,6 +102,12 @@ Then open <http://localhost:7979>.
 > volume, add it as **one source** (e.g. `/media`) — it preserves the
 > `movies/tv/music` tree on the backup drive and gives you one recovery report.
 
+> **Let Archivarr manage backup drives.** It tracks backups by path, so don't
+> move, rename, or delete files — or the `_backup_meta/` folder — on a destination
+> drive yourself. Reorganize your **source** freely (a re-scan reconciles it, and
+> import can re-match moved files by content hash), but treat the backup drive's
+> layout as Archivarr's to manage.
+
 ---
 
 ## Configuration

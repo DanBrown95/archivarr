@@ -29,6 +29,7 @@ func HasSnapshot(destRoot string) bool {
 // or media items.
 type SnapshotOptions struct {
 	SnapshotPath  string
+	DestRoot      string // the destination's mount path, for verifying files are present
 	DestDriveID   int64  // the live destination drive being imported
 	DestMarkerID  string // its marker id, used to locate it within the snapshot
 	SourceDriveID int64  // the current source to match recorded files against
@@ -43,6 +44,7 @@ type SnapshotStats struct {
 	MatchedByHash     int `json:"matchedByHash"` // of imported, matched via hash (path missed)
 	AlreadyKnown      int `json:"alreadyKnown"`
 	Unmatched         int `json:"unmatched"` // no current source media item matched
+	Missing           int `json:"missing"`   // recorded in the snapshot but not present on the drive
 	Errors            int `json:"errors"`
 }
 
@@ -174,6 +176,17 @@ func ImportDestinationSnapshot(ctx context.Context, d *db.DB, opts SnapshotOptio
 		}
 		opts.progress(i+1, len(records))
 
+		// The snapshot is trusted for what it recorded, but the drive may have
+		// changed since — only record files that are actually present at their
+		// recorded path, so we never claim coverage for moved/deleted files.
+		if opts.DestRoot != "" {
+			full := filepath.Join(opts.DestRoot, filepath.FromSlash(r.destRel))
+			if fi, statErr := os.Stat(full); statErr != nil || fi.IsDir() {
+				st.Missing++
+				continue
+			}
+		}
+
 		m, ok := byRel[r.relPath]
 		viaHash := false
 		if !ok {
@@ -216,8 +229,8 @@ func ImportDestinationSnapshot(ctx context.Context, d *db.DB, opts SnapshotOptio
 		}
 	}
 
-	opts.logf("snapshot import done: %d imported (%d by hash), %d already known, %d unmatched, %d errors",
-		st.Imported, st.MatchedByHash, st.AlreadyKnown, st.Unmatched, st.Errors)
+	opts.logf("snapshot import done: %d imported (%d by hash), %d already known, %d unmatched, %d missing from drive, %d errors",
+		st.Imported, st.MatchedByHash, st.AlreadyKnown, st.Unmatched, st.Missing, st.Errors)
 	return st, nil
 }
 

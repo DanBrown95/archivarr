@@ -67,8 +67,13 @@ anything substantial before starting a PR.
       backups and register the files that match a current source as existing
       backups, so they aren't re-copied. Matches by relative path; when the drive
       carries an Archivarr DB snapshot, its stored content hashes also match files
-      that moved/reorganized on the source. Unmatched files are reported, never
-      created (no sources or media are invented).
+      that moved/reorganized on the source. Snapshot import verifies each file is
+      physically present before recording it (no false coverage). Unmatched files
+      are reported, never created (no sources or media are invented).
+- [ ] (Enhancement) Content-hash fallback for the *filesystem* import too, so files
+      reorganized **on a destination drive** can be re-matched by content. Deferred:
+      reorganizing a managed backup drive is unusual and the path model handles the
+      normal cases; this would require reading/hashing destination files.
 - [ ] **Per-destination file listing** — browse the exact files stored on a given
       destination drive (currently only counts are shown).
 - [ ] Explicit "prune stale entries" action (currently implicit: vanished source

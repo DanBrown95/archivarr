@@ -11,7 +11,7 @@ import (
 func sp(s string) *string { return &s }
 
 // buildSnapshot writes a standalone Archivarr DB file (as a prior backup would
-// have written to <dest>/_backup_meta/archivarr.db) recording five backups to a
+// have written to <dest>/.archivarr/archivarr.db) recording five backups to a
 // destination, and returns its path and the destination's marker id.
 func buildSnapshot(t *testing.T) (string, string) {
 	t.Helper()

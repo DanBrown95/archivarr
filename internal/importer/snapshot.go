@@ -9,11 +9,12 @@ import (
 	"path/filepath"
 
 	"github.com/danbrown95/archivarr/internal/db"
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
 // SnapshotPath returns the path to a destination's Archivarr DB snapshot.
 func SnapshotPath(destRoot string) string {
-	return filepath.Join(destRoot, metaDir, "archivarr.db")
+	return filepath.Join(destRoot, util.MetaDirName, util.SnapshotName)
 }
 
 // HasSnapshot reports whether a destination carries an Archivarr DB snapshot

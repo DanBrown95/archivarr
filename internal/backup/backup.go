@@ -12,9 +12,6 @@ import (
 	"github.com/danbrown95/archivarr/internal/util"
 )
 
-// MetaDirName is the folder on a destination drive holding the DB snapshot.
-const MetaDirName = "_backup_meta"
-
 // Stats summarizes a backup run.
 type Stats struct {
 	Total       int   `json:"total"`
@@ -212,7 +209,7 @@ func (r *Runner) RunBackup(ctx context.Context, source, dest *db.Drive, itemIDs 
 	if err := r.copyDBMeta(ctx, destRoot); err != nil {
 		prog.logf("warning: could not write DB snapshot to destination: %v", err)
 	} else {
-		prog.logf("wrote DB snapshot to %s", filepath.Join(destRoot, MetaDirName))
+		prog.logf("wrote DB snapshot to %s", filepath.Join(destRoot, util.MetaDirName))
 	}
 
 	prog.logf("backup done: copied %d, adopted %d, conflicts %d, failed %d, %s",
@@ -261,9 +258,9 @@ func (r *Runner) adoptExisting(ctx context.Context, item db.MediaItem, srcPath, 
 }
 
 func (r *Runner) copyDBMeta(ctx context.Context, destRoot string) error {
-	metaDir := filepath.Join(destRoot, MetaDirName)
+	metaDir := filepath.Join(destRoot, util.MetaDirName)
 	if err := os.MkdirAll(metaDir, 0o755); err != nil {
 		return err
 	}
-	return r.DB.BackupTo(ctx, filepath.Join(metaDir, "archivarr.db"))
+	return r.DB.BackupTo(ctx, filepath.Join(metaDir, util.SnapshotName))
 }

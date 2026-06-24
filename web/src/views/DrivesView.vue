@@ -268,7 +268,7 @@ async function registerMount(m) {
       </p>
       <p class="muted" style="margin-top: 0; font-size: 12px">
         Tip: let Archivarr manage the layout — don't move, rename, or delete files (or the
-        <span class="mono">_backup_meta</span> folder) on a backup drive yourself, or it can lose
+        <span class="mono">.archivarr</span> folder) on a backup drive yourself, or it can lose
         track of what's stored where.
       </p>
       <n-alert v-if="!sourceOptions.length" type="warning" :bordered="false" style="margin-bottom: 12px">

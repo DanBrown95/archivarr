@@ -1,4 +1,4 @@
-// Package util holds small, dependency-free helpers shared across packages.
+// Package util holds small, dependency-free helpers and shared constants.
 package util
 
 import (
@@ -6,6 +6,15 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+)
+
+// On-disk layout for Archivarr's per-destination metadata. Everything lives in a
+// single hidden directory at the drive root so it's tidy and hard to delete by
+// accident.
+const (
+	MetaDirName    = ".archivarr"   // hidden metadata directory at a destination's root
+	MarkerFileName = "drive-id"     // stable drive identity, inside MetaDirName
+	SnapshotName   = "archivarr.db" // tracking-DB snapshot, inside MetaDirName
 )
 
 // Bytes formats a byte count in human-readable binary units (e.g. "1.2 GB").

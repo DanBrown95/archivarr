@@ -52,7 +52,7 @@ answer "what did I lose?" **without** the source or destination drives connected
   "a destination died: re-queue its files for a replacement drive."
 - **Bulk or single-file backups** — copy everything pending, or just one file.
 - **Self-protecting** — each backup run drops a snapshot of the tracking DB onto
-  the destination drive (`_backup_meta/`).
+  the destination drive (in a hidden `.archivarr/` folder).
 
 ---
 
@@ -91,8 +91,8 @@ Then open <http://localhost:7979>.
 
 1. **Drives → Add source** — point it at your library (e.g. `/media`).
 2. **Drives → Discover destinations** — plug in a backup drive and register it
-   (Archivarr writes a small `.archivarr-drive-id` marker so it's recognized next
-   time, at any mount path).
+   (Archivarr writes a small marker in a hidden `.archivarr/` folder so it's
+   recognized next time, at any mount path).
 3. **Media → Scan sources** — index the library.
 4. **Drives → Back up** (or per-file from **Media**) — copy what's not yet backed up.
 
@@ -103,7 +103,7 @@ Then open <http://localhost:7979>.
 > `movies/tv/music` tree on the backup drive and gives you one recovery report.
 
 > **Let Archivarr manage backup drives.** It tracks backups by path, so don't
-> move, rename, or delete files — or the `_backup_meta/` folder — on a destination
+> move, rename, or delete files — or the hidden `.archivarr/` folder — on a destination
 > drive yourself. Reorganize your **source** freely (a re-scan reconciles it, and
 > import can re-match moved files by content hash), but treat the backup drive's
 > layout as Archivarr's to manage.

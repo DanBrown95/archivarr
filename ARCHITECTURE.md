@@ -40,7 +40,7 @@ Linux/WSL environment (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 Mount paths are unstable (`/mnt/usb1` today, `/mnt/usb3` tomorrow), so Archivarr
 does **not** identify drives by path:
 
-- **Destinations** get a small marker file (`.archivarr-drive-id`) written to
+- **Destinations** get a small marker file (`.archivarr/drive-id`) written to
   their root. The drive is recognized by that id wherever it mounts.
 - **Sources** are identified by their configured root path (always-on).
 
@@ -125,7 +125,7 @@ requested.
 4. Record the `backups` row (with the verification hash).
 5. When the destination fills, stop cleanly with remaining-count info (resume on
    the next drive).
-6. Write a snapshot of the tracking DB to `<dest>/_backup_meta/archivarr.db` so a
+6. Write a snapshot of the tracking DB to `<dest>/.archivarr/archivarr.db` so a
    backup is self-describing even if the database/source is lost.
 
 ## Jobs, scheduling, and pause

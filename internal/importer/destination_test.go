@@ -8,6 +8,7 @@ import (
 
 	"github.com/danbrown95/archivarr/internal/db"
 	"github.com/danbrown95/archivarr/internal/hash"
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
 func setupImportDB(t *testing.T) (*db.DB, context.Context) {
@@ -58,11 +59,11 @@ func TestImportDestinationFS(t *testing.T) {
 	addMediaItem(t, d, ctx, src.ID, "c.txt", 100, nil) // size won't match the file
 
 	destRoot := t.TempDir()
-	writeFile(t, filepath.Join(destRoot, "a.txt"), "hello")             // match (5 bytes)
-	writeFile(t, filepath.Join(destRoot, "Movies", "b.txt"), "world")   // match, nested (5 bytes)
-	writeFile(t, filepath.Join(destRoot, "c.txt"), "abc")               // size mismatch (3 != 100)
-	writeFile(t, filepath.Join(destRoot, "extra.txt"), "xx")            // unmatched
-	writeFile(t, filepath.Join(destRoot, metaDir, "archivarr.db"), "x") // skipped (meta dir)
+	writeFile(t, filepath.Join(destRoot, "a.txt"), "hello")                         // match (5 bytes)
+	writeFile(t, filepath.Join(destRoot, "Movies", "b.txt"), "world")               // match, nested (5 bytes)
+	writeFile(t, filepath.Join(destRoot, "c.txt"), "abc")                           // size mismatch (3 != 100)
+	writeFile(t, filepath.Join(destRoot, "extra.txt"), "xx")                        // unmatched
+	writeFile(t, filepath.Join(destRoot, util.MetaDirName, util.SnapshotName), "x") // skipped (meta dir)
 
 	st, err := ImportDestinationFS(ctx, d, FSOptions{
 		SourceDriveID: src.ID, DestDriveID: dest.ID, DestRoot: destRoot,
@@ -70,7 +71,7 @@ func TestImportDestinationFS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.FilesSeen != 4 { // a, b, c, extra — _backup_meta skipped
+	if st.FilesSeen != 4 { // a, b, c, extra — .archivarr skipped
 		t.Fatalf("FilesSeen = %d, want 4", st.FilesSeen)
 	}
 	if st.Imported != 2 || st.SizeMismatch != 1 || st.Unmatched != 1 {

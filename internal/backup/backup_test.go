@@ -11,6 +11,7 @@ import (
 	"github.com/danbrown95/archivarr/internal/hash"
 	"github.com/danbrown95/archivarr/internal/pathfilter"
 	"github.com/danbrown95/archivarr/internal/scan"
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
 func TestCopyFileIntegrity(t *testing.T) {
@@ -124,7 +125,7 @@ func TestRunBackupCopiesVerifiesRecords(t *testing.T) {
 	}
 
 	// DB snapshot written to the destination.
-	if _, err := os.Stat(filepath.Join(destRoot, backup.MetaDirName, "archivarr.db")); err != nil {
+	if _, err := os.Stat(filepath.Join(destRoot, util.MetaDirName, util.SnapshotName)); err != nil {
 		t.Fatalf("expected DB snapshot on destination: %v", err)
 	}
 

@@ -11,12 +11,8 @@ import (
 	"github.com/danbrown95/archivarr/internal/db"
 	"github.com/danbrown95/archivarr/internal/hash"
 	"github.com/danbrown95/archivarr/internal/pathfilter"
+	"github.com/danbrown95/archivarr/internal/util"
 )
-
-// metaDir is the destination subfolder holding Archivarr's DB snapshot; it's
-// never media, so it's skipped when importing. Mirrors backup.MetaDirName (kept
-// local to avoid importing the backup package here).
-const metaDir = "_backup_meta"
 
 // FSOptions controls a filesystem destination import: walk an existing backup
 // drive and register files that match a source's tracked media items as existing
@@ -104,8 +100,8 @@ func ImportDestinationFS(ctx context.Context, d *db.DB, opts FSOptions) (FSStats
 		}
 		rel = filepath.ToSlash(rel)
 		if dirent.IsDir() {
-			if rel == metaDir {
-				return filepath.SkipDir // skip Archivarr's snapshot/meta folder
+			if rel == util.MetaDirName {
+				return filepath.SkipDir // skip Archivarr's metadata folder
 			}
 			return nil
 		}

@@ -8,11 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/danbrown95/archivarr/internal/util"
 )
 
-// MarkerFileName is written to a destination drive's root to give it a stable
-// identity that survives remounts at different paths.
-const MarkerFileName = ".archivarr-drive-id"
+// markerPath is the drive-identity file: <root>/.archivarr/drive-id. It lives in
+// the hidden metadata directory so it survives remounts and is hard to delete by
+// accident.
+func markerPath(root string) string {
+	return filepath.Join(root, util.MetaDirName, util.MarkerFileName)
+}
 
 // newMarkerID returns a random 128-bit hex identity.
 func newMarkerID() (string, error) {
@@ -26,7 +31,7 @@ func newMarkerID() (string, error) {
 // ReadMarker returns the marker id stored at root, with ok=false if no marker
 // file is present (or it is empty).
 func ReadMarker(root string) (id string, ok bool, err error) {
-	data, err := os.ReadFile(filepath.Join(root, MarkerFileName))
+	data, err := os.ReadFile(markerPath(root))
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", false, nil
 	}
@@ -51,7 +56,10 @@ func EnsureMarker(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(root, MarkerFileName), []byte(id+"\n"), 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, util.MetaDirName), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(markerPath(root), []byte(id+"\n"), 0o644); err != nil {
 		return "", err
 	}
 	return id, nil

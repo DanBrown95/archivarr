@@ -16,9 +16,9 @@
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
 </p>
 
-Archivarr is a self-hosted, *arr-style backup tracker for large media libraries.
+Archivarr is a self-hosted, *arr-style backup/archive tracker for large media libraries.
 It keeps a database of every file in your library and which backup drive(s) hold
-each copy — so you can plan backups and answer *"what would I lose if this drive
+each copy — so you can plan backups/archives and answer *"what would I lose if this drive
 died?"* without any drives connected.
 
 > **The problem it solves:** big libraries outgrow a single backup drive. Archivarr

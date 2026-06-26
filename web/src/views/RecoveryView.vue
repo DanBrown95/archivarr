@@ -1,11 +1,14 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
+import { useBreakpoints } from '@vueuse/core'
 import { api } from '../api'
+import { breakpoints } from '../breakpoints'
 import { formatBytes } from '../util'
 
 const message = useMessage()
 const dialog = useDialog()
+const isMobile = useBreakpoints(breakpoints).smaller('s')
 
 const drives = ref([])
 const stats = ref(null)
@@ -91,6 +94,21 @@ function confirmRemove(list) {
     },
   })
 }
+
+// Column defs for the "where to recover from" table.
+const recoverColumns = [
+  { title: 'Plug in this drive', key: 'label', minWidth: 180 },
+  { title: 'Files to restore', key: 'files', width: 140 },
+  {
+    title: 'Data',
+    key: 'bytes',
+    width: 140,
+    render: (row) => h('span', { class: 'muted' }, formatBytes(row.bytes)),
+  },
+]
+
+// Derived from the columns so the horizontal-scroll threshold stays in sync.
+const recoverScrollX = recoverColumns.reduce((total, c) => total + (c.width || c.minWidth || 0), 0)
 </script>
 
 <template>
@@ -102,30 +120,31 @@ function confirmRemove(list) {
       <!-- ============ SOURCE FAILURE ============ -->
       <n-tab-pane name="source" tab="Source drive failed">
         <n-card title="What was on a source drive, and where are the copies?">
-          <n-space align="center">
-            <n-select
-              v-model:value="selectedSource"
-              :options="driveOptions(sourceDrives)"
-              placeholder="Select source drive"
-              style="width: 240px"
-            />
-            <n-button type="primary" :loading="reportLoading" :disabled="!selectedSource" @click="runReport">
-              Generate report
-            </n-button>
-            <n-button quaternary :disabled="!selectedSource" @click="confirmRemove('source')">Remove drive…</n-button>
-          </n-space>
+          <n-grid :cols="24" :x-gap="12" :y-gap="12" responsive="screen" item-responsive>
+            <n-gi span="24 m:10">
+              <n-select v-model:value="selectedSource" :options="driveOptions(sourceDrives)"
+                placeholder="Select source drive" />
+            </n-gi>
+            <n-gi span="24 m:7">
+              <n-button block type="primary" :loading="reportLoading" :disabled="!selectedSource" @click="runReport">
+                Generate report
+              </n-button>
+            </n-gi>
+            <n-gi span="24 m:7">
+              <n-button block quaternary :disabled="!selectedSource" @click="confirmRemove('source')">
+                Remove drive…
+              </n-button>
+            </n-gi>
+          </n-grid>
 
           <template v-if="report">
-            <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 20px">
-              <n-gi><n-card><n-statistic label="Files tracked" :value="report.totalTracked" /></n-card></n-gi>
-              <n-gi
-                ><n-card
-                  ><n-statistic label="Recoverable" :value="report.recoverableFiles"
-                    ><template #suffix><span class="muted">&nbsp;· {{ formatBytes(report.recoverableBytes) }}</span></template></n-statistic
-                  ></n-card
-                ></n-gi
-              >
-              <n-gi>
+            <n-grid :cols="3" :x-gap="16" :y-gap="16" responsive="screen" item-responsive style="margin-top: 20px">
+              <n-gi span="3 m:1"><n-card><n-statistic label="Files tracked"
+                    :value="report.totalTracked" /></n-card></n-gi>
+              <n-gi span="3 m:1"><n-card><n-statistic label="Recoverable" :value="report.recoverableFiles"><template
+                      #suffix><span class="muted">&nbsp;· {{ formatBytes(report.recoverableBytes)
+                        }}</span></template></n-statistic></n-card></n-gi>
+              <n-gi span="3 m:1">
                 <n-card>
                   <n-statistic label="Lost (no backup)" :value="report.lostFiles">
                     <template #suffix><span class="muted">&nbsp;· {{ formatBytes(report.lostBytes) }}</span></template>
@@ -138,24 +157,14 @@ function confirmRemove(list) {
             <n-alert v-if="!report.perDestination.length" type="warning">
               No backups exist for this source — nothing can be recovered.
             </n-alert>
-            <n-table v-else :bordered="false" :single-line="false">
-              <thead>
-                <tr><th>Plug in this drive</th><th>Files to restore</th><th>Data</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="d in report.perDestination" :key="d.driveId">
-                  <td>{{ d.label }}</td>
-                  <td>{{ d.files }}</td>
-                  <td class="muted">{{ formatBytes(d.bytes) }}</td>
-                </tr>
-              </tbody>
-            </n-table>
+            <n-data-table v-else :columns="recoverColumns" :data="report.perDestination" :row-key="(row) => row.driveId"
+              :bordered="false" :single-line="false" :scroll-x="recoverScrollX" />
 
             <n-divider title-placement="left">Lost files (no backup anywhere)</n-divider>
             <n-alert v-if="!report.lost.length" type="success">
               Everything on this source is backed up — nothing is lost.
             </n-alert>
-            <pre v-else class="lostbox mono">{{ report.lost.map((l) => l.relPath).join('\n') }}</pre>
+            <pre v-else class="lostbox mono">{{report.lost.map((l) => l.relPath).join('\n')}}</pre>
           </template>
         </n-card>
       </n-tab-pane>
@@ -163,18 +172,25 @@ function confirmRemove(list) {
       <!-- ============ DESTINATION FAILURE ============ -->
       <n-tab-pane name="destination" tab="Destination drive failed">
         <n-card title="A backup drive died — re-queue its files">
-          <n-space align="center">
-            <n-select
-              v-model:value="selectedDest"
-              :options="driveOptions(destDrives)"
-              placeholder="Select destination drive"
-              style="width: 240px"
-            />
-            <n-button type="warning" :disabled="!selectedDest" @click="confirmRequeue">Re-queue for backup</n-button>
-            <n-button quaternary :disabled="!selectedDest" @click="confirmRemove('dest')">Remove drive…</n-button>
-          </n-space>
+          <n-grid :cols="24" :x-gap="12" :y-gap="12" responsive="screen" item-responsive>
+            <n-gi span="24 m:10">
+              <n-select v-model:value="selectedDest" :options="driveOptions(destDrives)"
+                placeholder="Select destination drive" />
+            </n-gi>
+            <n-gi span="24 m:7">
+              <n-button block type="warning" :disabled="!selectedDest" @click="confirmRequeue">
+                Re-queue for backup
+              </n-button>
+            </n-gi>
+            <n-gi span="24 m:7">
+              <n-button block quaternary :disabled="!selectedDest" @click="confirmRemove('dest')">
+                Remove drive…
+              </n-button>
+            </n-gi>
+          </n-grid>
 
-          <n-descriptions v-if="destInfo" label-placement="left" :columns="2" style="margin-top: 20px" bordered>
+          <n-descriptions v-if="destInfo" label-placement="left" :columns="isMobile ? 1 : 2" style="margin-top: 20px"
+            bordered>
             <n-descriptions-item label="Files stored">{{ destInfo.files }}</n-descriptions-item>
             <n-descriptions-item label="Data stored">{{ formatBytes(destInfo.bytes) }}</n-descriptions-item>
             <n-descriptions-item label="Status">{{ destInfo.online ? 'online' : 'offline' }}</n-descriptions-item>

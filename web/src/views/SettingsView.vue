@@ -3,10 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useBreakpoints } from '@vueuse/core'
+import { breakpoints } from '../breakpoints'
 
 const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
+const isMobile = useBreakpoints(breakpoints).smaller('s')
 const loading = ref(false)
 const saving = ref(false)
 
@@ -155,36 +158,18 @@ async function save() {
           <n-input v-model:value="account.username" placeholder="Username" />
         </n-form-item>
         <n-form-item label="Current password" required>
-          <n-input
-            v-model:value="account.currentPassword"
-            type="password"
-            show-password-on="click"
-            placeholder="Required to confirm any change"
-          />
+          <n-input v-model:value="account.currentPassword" type="password" show-password-on="click"
+            placeholder="Required to confirm any change" />
         </n-form-item>
-        <n-form-item
-          label="New password"
-          :validation-status="accountPwTooShort ? 'error' : undefined"
-          :feedback="accountPwTooShort ? 'At least 8 characters' : undefined"
-        >
-          <n-input
-            v-model:value="account.newPassword"
-            type="password"
-            show-password-on="click"
-            placeholder="Leave blank to keep current password"
-          />
+        <n-form-item label="New password" :validation-status="accountPwTooShort ? 'error' : undefined"
+          :feedback="accountPwTooShort ? 'At least 8 characters' : undefined">
+          <n-input v-model:value="account.newPassword" type="password" show-password-on="click"
+            placeholder="Leave blank to keep current password" />
         </n-form-item>
-        <n-form-item
-          label="Confirm new password"
-          :validation-status="accountMismatch ? 'error' : undefined"
-          :feedback="accountMismatch ? 'Passwords do not match' : undefined"
-        >
-          <n-input
-            v-model:value="account.confirm"
-            type="password"
-            show-password-on="click"
-            placeholder="Re-enter new password"
-          />
+        <n-form-item label="Confirm new password" :validation-status="accountMismatch ? 'error' : undefined"
+          :feedback="accountMismatch ? 'Passwords do not match' : undefined">
+          <n-input v-model:value="account.confirm" type="password" show-password-on="click"
+            placeholder="Re-enter new password" />
         </n-form-item>
         <n-space justify="end">
           <n-button type="primary" :loading="savingAccount" @click="saveAccount">Update account</n-button>
@@ -200,22 +185,19 @@ async function save() {
         access to your data. Liveness monitoring doesn't need it; use the public
         <span class="mono">/api/health</span> endpoint.
       </p>
-      <n-input-group>
-        <n-input
-          :value="apiKey"
-          :type="apiKeyRevealed ? 'text' : 'password'"
-          readonly
-          placeholder="Loading…"
-          class="mono"
-        />
-        <n-button tertiary @click="apiKeyRevealed = !apiKeyRevealed">
-          {{ apiKeyRevealed ? 'Hide' : 'Reveal' }}
-        </n-button>
-        <n-button tertiary :disabled="!apiKey" @click="copyApiKey">Copy</n-button>
-        <n-button type="warning" :loading="regeneratingKey" @click="confirmRegenerateKey">
-          Regenerate
-        </n-button>
-      </n-input-group>
+      <div class="api-key-controls">
+        <n-input :value="apiKey" :type="apiKeyRevealed ? 'text' : 'password'" readonly placeholder="Loading…"
+          class="mono api-key-input" />
+        <div class="api-key-buttons">
+          <n-button tertiary @click="apiKeyRevealed = !apiKeyRevealed">
+            {{ apiKeyRevealed ? 'Hide' : 'Reveal' }}
+          </n-button>
+          <n-button tertiary :disabled="!apiKey" @click="copyApiKey">Copy</n-button>
+          <n-button type="warning" :loading="regeneratingKey" @click="confirmRegenerateKey">
+            Regenerate
+          </n-button>
+        </div>
+      </div>
     </n-card>
 
     <n-spin :show="loading">
@@ -246,14 +228,18 @@ async function save() {
       </n-card>
 
       <n-card title="Automatic scans">
-        <n-form label-placement="left" label-width="220">
+        <n-form :label-placement="isMobile ? 'top' : 'left'" :label-width="isMobile ? undefined : 220">
           <n-form-item label="Auto-scan interval (minutes)">
-            <n-input-number v-model:value="form.scanIntervalMinutes" :min="0" :step="15" style="width: 160px" />
-            <span class="muted" style="margin-left: 12px">0 = disabled. Scans every source on this interval.</span>
+            <div class="control-with-hint">
+              <n-input-number v-model:value="form.scanIntervalMinutes" :min="0" :step="15" class="interval-input" />
+              <span class="muted hint">0 = disabled. Scans every source on this interval.</span>
+            </div>
           </n-form-item>
           <n-form-item label="Compute hashes on auto-scan">
-            <n-switch v-model:value="form.scanHashOnScan" />
-            <span class="muted" style="margin-left: 12px">Slower, but enables integrity checks. Manual scans choose this per run.</span>
+            <div class="control-with-hint">
+              <n-switch v-model:value="form.scanHashOnScan" />
+              <span class="muted hint">Slower, but enables integrity checks. Manual scans choose this per run.</span>
+            </div>
           </n-form-item>
         </n-form>
       </n-card>
@@ -265,3 +251,47 @@ async function save() {
     </n-spin>
   </div>
 </template>
+
+<style scoped>
+.api-key-controls {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.api-key-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.api-key-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.control-with-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+
+.interval-input {
+  width: 160px;
+}
+
+.hint {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .api-key-controls {
+    flex-direction: column;
+  }
+
+  .api-key-buttons>* {
+    flex: 1;
+  }
+}
+</style>

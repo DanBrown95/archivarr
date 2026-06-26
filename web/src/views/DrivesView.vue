@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage, useDialog } from 'naive-ui'
+import { NButton, NDropdown, NInput, NProgress, NSpace, NTag, useMessage, useDialog } from 'naive-ui'
 import { api } from '../api'
 import { cap, formatBytes, formatTime, usedPercent } from '../util'
 
@@ -179,6 +179,151 @@ async function registerMount(m) {
     message.error(String(e))
   }
 }
+
+// Column defs for the main drives table. Computed so the per-row "Back up"
+// dropdown reflects which destinations are currently online.
+const driveColumns = computed(() => [
+  { title: 'Label', key: 'label', minWidth: 140 },
+  {
+    title: 'Role',
+    key: 'role',
+    width: 110,
+    render: (row) =>
+      h(NTag, { size: 'small', type: roleType[row.role] || 'default' }, { default: () => cap(row.role) }),
+  },
+  {
+    title: 'Status',
+    key: 'online',
+    width: 100,
+    render: (row) =>
+      h(
+        NTag,
+        { size: 'small', type: row.online ? 'success' : 'default', bordered: false },
+        { default: () => (row.online ? 'Online' : 'Offline') },
+      ),
+  },
+  {
+    title: 'Mount / path',
+    key: 'path',
+    width: 240,
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'mono muted' }, row.rootPath || row.lastMountPath || '—'),
+  },
+  {
+    title: 'Capacity',
+    key: 'capacity',
+    width: 220,
+    render: (row) =>
+      row.capacityBytes
+        ? h('div', null, [
+          h(NProgress, {
+            type: 'line',
+            percentage: usedPercent(row.freeBytes, row.capacityBytes),
+            height: 8,
+            showIndicator: false,
+          }),
+          h(
+            'span',
+            { class: 'muted mono' },
+            `${formatBytes(row.freeBytes)} free / ${formatBytes(row.capacityBytes)}`,
+          ),
+        ])
+        : h('span', { class: 'muted' }, '—'),
+  },
+  {
+    title: 'Last seen',
+    key: 'lastSeenAt',
+    width: 170,
+    render: (row) => h('span', { class: 'muted' }, formatTime(row.lastSeenAt)),
+  },
+  {
+    title: 'Actions',
+    key: 'actions',
+    width: 260,
+    align: 'right',
+    render: (row) =>
+      h('div', { class: 'row-actions' }, [
+        isSource(row)
+          ? h(
+            NDropdown,
+            { trigger: 'click', options: scanOptions, onSelect: (k) => onScan(row, k) },
+            { default: () => h(NButton, { size: 'small' }, { default: () => 'Scan ▾' }) },
+          )
+          : null,
+        isSource(row)
+          ? h(
+            NDropdown,
+            { trigger: 'click', options: backupOptions.value, onSelect: (k) => onBackup(row, k) },
+            { default: () => h(NButton, { size: 'small', type: 'primary' }, { default: () => 'Back up ▾' }) },
+          )
+          : null,
+        isDest(row) && row.online
+          ? h(NButton, { size: 'small', onClick: () => openImport(row) }, { default: () => 'Import existing' })
+          : null,
+        h(
+          NButton,
+          { size: 'small', quaternary: true, type: 'error', onClick: () => confirmRemove(row) },
+          { default: () => 'Remove' },
+        ),
+      ]),
+  },
+])
+
+// Column defs for the discover-destinations table inside its modal.
+const discoverColumns = [
+  {
+    title: 'Path',
+    key: 'path',
+    minWidth: 200,
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'mono' }, row.path),
+  },
+  {
+    title: 'Status',
+    key: 'status',
+    width: 140,
+    render: (row) => {
+      if (row.known) {
+        return h(
+          NTag,
+          { size: 'small', type: 'success', bordered: false },
+          { default: () => `registered #${row.driveId}` },
+        )
+      }
+      if (row.hasMarker) {
+        return h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => 'has marker' })
+      }
+      return h(NTag, { size: 'small', bordered: false }, { default: () => 'unregistered' })
+    },
+  },
+  {
+    title: 'Register as',
+    key: 'register',
+    width: 240,
+    align: 'right',
+    render: (row) =>
+      row.known
+        ? h('span', { class: 'muted' }, '—')
+        : h(NSpace, { justify: 'end', wrap: false }, {
+          default: () => [
+            h(NInput, {
+              value: labels.value[row.path],
+              size: 'small',
+              placeholder: 'label',
+              style: 'width: 160px',
+              'onUpdate:value': (v) => {
+                labels.value[row.path] = v
+              },
+            }),
+            h(
+              NButton,
+              { size: 'small', type: 'primary', onClick: () => registerMount(row) },
+              { default: () => 'Register' },
+            ),
+          ],
+        }),
+  },
+]
 </script>
 
 <template>
@@ -196,70 +341,18 @@ async function registerMount(m) {
     </n-space>
 
     <n-card>
-      <n-empty v-if="!drives.length && !loading" description="No drives yet — add a source or discover a destination." />
-      <n-table v-else :bordered="false" :single-line="false">
-        <thead>
-          <tr>
-            <th>Label</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Mount / path</th>
-            <th>Capacity</th>
-            <th>Last seen</th>
-            <th style="text-align: right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="d in drives" :key="d.id">
-            <td>{{ d.label }}</td>
-            <td><n-tag size="small" :type="roleType[d.role] || 'default'">{{ cap(d.role) }}</n-tag></td>
-            <td>
-              <n-tag size="small" :type="d.online ? 'success' : 'default'" :bordered="false">
-                {{ d.online ? 'Online' : 'Offline' }}
-              </n-tag>
-            </td>
-            <td class="mono muted">{{ d.rootPath || d.lastMountPath || '—' }}</td>
-            <td style="min-width: 160px">
-              <template v-if="d.capacityBytes">
-                <n-progress
-                  type="line"
-                  :percentage="usedPercent(d.freeBytes, d.capacityBytes)"
-                  :height="8"
-                  :show-indicator="false"
-                />
-                <span class="muted mono">{{ formatBytes(d.freeBytes) }} free / {{ formatBytes(d.capacityBytes) }}</span>
-              </template>
-              <span v-else class="muted">—</span>
-            </td>
-            <td class="muted">{{ formatTime(d.lastSeenAt) }}</td>
-            <td>
-              <div class="row-actions">
-                <template v-if="isSource(d)">
-                  <n-dropdown trigger="click" :options="scanOptions" @select="(k) => onScan(d, k)">
-                    <n-button size="small">Scan ▾</n-button>
-                  </n-dropdown>
-                  <n-dropdown trigger="click" :options="backupOptions" @select="(k) => onBackup(d, k)">
-                    <n-button size="small" type="primary">Back up ▾</n-button>
-                  </n-dropdown>
-                </template>
-                <n-button v-if="isDest(d) && d.online" size="small" @click="openImport(d)">
-                  Import existing
-                </n-button>
-                <n-button size="small" quaternary type="error" @click="confirmRemove(d)">Remove</n-button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </n-table>
+      <n-data-table :columns="driveColumns" :data="drives" :row-key="(row) => row.id" :loading="loading"
+        :bordered="false" :single-line="false" :scroll-x="1240">
+        <template #empty>
+          <n-empty description="No drives yet — add a source or discover a destination." />
+        </template>
+      </n-data-table>
     </n-card>
 
     <!-- Import existing backups modal -->
-    <n-modal
-      v-model:show="showImport"
-      preset="card"
+    <n-modal v-model:show="showImport" preset="card"
       :title="importTarget ? `Import existing backups — ${importTarget.label}` : 'Import existing backups'"
-      style="width: 520px"
-    >
+      style="width: 520px; max-width: calc(100vw - 32px)">
       <p class="muted" style="margin-top: 0">
         Registers files already on this destination as existing backups of the source you choose,
         so they aren't re-copied. Files are matched by path — and by content hash when available
@@ -297,7 +390,8 @@ async function registerMount(m) {
     </n-modal>
 
     <!-- Add source modal -->
-    <n-modal v-model:show="showAdd" preset="card" title="Add source drive" style="width: 480px">
+    <n-modal v-model:show="showAdd" preset="card" title="Add source drive"
+      style="width: 480px; max-width: calc(100vw - 32px)">
       <n-form>
         <n-form-item label="Label">
           <n-input v-model:value="addForm.label" placeholder="e.g. NAS_Media" />
@@ -315,33 +409,15 @@ async function registerMount(m) {
     </n-modal>
 
     <!-- Discover destinations modal -->
-    <n-modal v-model:show="showDiscover" preset="card" title="Discover destination drives" style="width: 640px">
+    <n-modal v-model:show="showDiscover" preset="card" title="Discover destination drives"
+      style="width: 640px; max-width: calc(100vw - 32px)">
       <p class="muted">Mount points found under the scan roots. Register one to write its marker and track it.</p>
-      <n-spin :show="discoverLoading">
-        <n-empty v-if="!discovered.length && !discoverLoading" description="No mount points found." />
-        <n-table v-else :bordered="false">
-          <thead>
-            <tr><th>Path</th><th>Status</th><th style="text-align: right">Register as</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="m in discovered" :key="m.path">
-              <td class="mono">{{ m.path }}</td>
-              <td>
-                <n-tag v-if="m.known" size="small" type="success" :bordered="false">registered #{{ m.driveId }}</n-tag>
-                <n-tag v-else-if="m.hasMarker" size="small" type="warning" :bordered="false">has marker</n-tag>
-                <n-tag v-else size="small" :bordered="false">unregistered</n-tag>
-              </td>
-              <td>
-                <n-space v-if="!m.known" justify="end" :wrap="false">
-                  <n-input v-model:value="labels[m.path]" size="small" placeholder="label" style="width: 160px" />
-                  <n-button size="small" type="primary" @click="registerMount(m)">Register</n-button>
-                </n-space>
-                <span v-else class="muted">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </n-table>
-      </n-spin>
+      <n-data-table :columns="discoverColumns" :data="discovered" :row-key="(row) => row.path"
+        :loading="discoverLoading" :bordered="false" :scroll-x="580">
+        <template #empty>
+          <n-empty description="No mount points found." />
+        </template>
+      </n-data-table>
     </n-modal>
   </div>
 </template>

@@ -1,11 +1,14 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useDialog, useMessage } from 'naive-ui'
+import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { NButton, NProgress, NTag, useDialog, useMessage } from 'naive-ui'
+import { useBreakpoints } from '@vueuse/core'
 import { api } from '../api'
+import { breakpoints } from '../breakpoints'
 import { cap, formatTime } from '../util'
 
 const message = useMessage()
 const dialog = useDialog()
+const isMobile = useBreakpoints(breakpoints).smaller('s')
 const jobs = ref([])
 const selected = ref(null)
 const showDrawer = ref(false)
@@ -95,6 +98,99 @@ function openDetail(job) {
   showDrawer.value = true
 }
 
+// Column defs for the jobs table.
+const jobColumns = [
+  { title: '#', key: 'id', width: 60 },
+  {
+    title: 'Type',
+    key: 'type',
+    width: 100,
+    render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => cap(row.type) }),
+  },
+  {
+    title: 'Trigger',
+    key: 'origin',
+    width: 120,
+    render: (row) =>
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: row.origin === 'auto' ? 'info' : 'default' },
+        { default: () => originLabel(row.origin) },
+      ),
+  },
+  {
+    title: 'Status',
+    key: 'status',
+    width: 110,
+    render: (row) =>
+      h(NTag, { size: 'small', type: statusType[row.status] || 'default' }, { default: () => cap(row.status) }),
+  },
+  {
+    title: 'Progress',
+    key: 'progress',
+    width: 180,
+    render: (row) =>
+      row.status === 'running'
+        ? h(NProgress, {
+          type: 'line',
+          percentage: Math.round((row.progress || 0) * 100),
+          height: 8,
+          processing: true,
+        })
+        : h('span', { class: 'muted' }, row.status === 'done' ? '100%' : '—'),
+  },
+  {
+    title: 'Summary',
+    key: 'summary',
+    minWidth: 240,
+    render: (row) => h('span', { class: 'muted' }, summary(row)),
+  },
+  {
+    title: 'Started',
+    key: 'started',
+    width: 170,
+    render: (row) => h('span', { class: 'muted' }, formatTime(row.startedAt || row.createdAt)),
+  },
+  {
+    title: 'Actions',
+    key: 'actions',
+    width: 160,
+    align: 'right',
+    render: (row) =>
+      h('div', { class: 'row-actions' }, [
+        h(NButton, { size: 'small', tertiary: true, onClick: () => openDetail(row) }, { default: () => 'Log' }),
+        row.status === 'running' || row.status === 'queued'
+          ? h(
+            NButton,
+            { size: 'small', type: 'error', ghost: true, onClick: () => cancel(row) },
+            { default: () => 'Cancel' },
+          )
+          : null,
+      ]),
+  },
+]
+
+// Derived from the columns so the horizontal-scroll threshold can't drift out of
+// sync with the column widths.
+const jobScrollX = jobColumns.reduce((total, c) => total + (c.width || c.minWidth || 0), 0)
+
+// Client-side pagination for the jobs table. A reactive object (controlled mode)
+// so the current page survives the 2s polling refresh instead of resetting.
+const pagination = reactive({
+  page: 1,
+  pageSize: 15,
+  showSizePicker: true,
+  pageSizes: [15, 30, 50],
+  prefix: ({ itemCount }) => `${itemCount} job(s)`,
+  onUpdatePage: (p) => {
+    pagination.page = p
+  },
+  onUpdatePageSize: (ps) => {
+    pagination.pageSize = ps
+    pagination.page = 1
+  },
+})
+
 let timer
 onMounted(() => {
   load()
@@ -119,62 +215,15 @@ onUnmounted(() => clearInterval(timer))
     </n-space>
 
     <n-card>
-      <n-empty v-if="!jobs.length" description="No jobs yet." />
-      <n-table v-else :bordered="false" :single-line="false">
-        <thead>
-          <tr>
-            <th style="width: 60px">#</th>
-            <th>Type</th>
-            <th style="width: 110px">Trigger</th>
-            <th>Status</th>
-            <th style="width: 180px">Progress</th>
-            <th>Summary</th>
-            <th>Started</th>
-            <th style="text-align: right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="j in jobs" :key="j.id">
-            <td>{{ j.id }}</td>
-            <td><n-tag size="small" :bordered="false">{{ cap(j.type) }}</n-tag></td>
-            <td>
-              <n-tag size="small" :bordered="false" :type="j.origin === 'auto' ? 'info' : 'default'">
-                {{ originLabel(j.origin) }}
-              </n-tag>
-            </td>
-            <td><n-tag size="small" :type="statusType[j.status] || 'default'">{{ cap(j.status) }}</n-tag></td>
-            <td>
-              <n-progress
-                v-if="j.status === 'running'"
-                type="line"
-                :percentage="Math.round((j.progress || 0) * 100)"
-                :height="8"
-                processing
-              />
-              <span v-else class="muted">{{ j.status === 'done' ? '100%' : '—' }}</span>
-            </td>
-            <td class="muted">{{ summary(j) }}</td>
-            <td class="muted">{{ formatTime(j.startedAt || j.createdAt) }}</td>
-            <td>
-              <div class="row-actions">
-                <n-button size="small" tertiary @click="openDetail(j)">Log</n-button>
-                <n-button
-                  v-if="j.status === 'running' || j.status === 'queued'"
-                  size="small"
-                  type="error"
-                  ghost
-                  @click="cancel(j)"
-                >
-                  Cancel
-                </n-button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </n-table>
+      <n-data-table :columns="jobColumns" :data="jobs" :row-key="(row) => row.id" :pagination="pagination"
+        :bordered="false" :single-line="false" :scroll-x="jobScrollX">
+        <template #empty>
+          <n-empty description="No jobs yet." />
+        </template>
+      </n-data-table>
     </n-card>
 
-    <n-drawer v-model:show="showDrawer" :width="520">
+    <n-drawer v-model:show="showDrawer" :width="isMobile ? '100%' : 520">
       <n-drawer-content v-if="selected" :title="`Job #${selected.id} — ${selected.type}`" closable>
         <n-space vertical>
           <div>

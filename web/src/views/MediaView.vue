@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { useMessage } from 'naive-ui'
+import { computed, h, onMounted, ref, watch } from 'vue'
+import { NButton, NDropdown, NProgress, NSpace, NTag, useMessage } from 'naive-ui'
 import { api } from '../api'
 import { formatBytes, formatTime, usedPercent } from '../util'
 
@@ -149,6 +149,128 @@ const coverageColor = computed(() => {
   return 'red'
 })
 
+// Column defs for the n-data-table render of the source-media list. Computed so
+// the per-row "Back up" dropdown picks up changes to the online destinations.
+const mediaColumns = computed(() => [
+  {
+    title: 'Path',
+    key: 'relPath',
+    width: 320,
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'mono' }, row.relPath),
+  },
+  {
+    title: 'Size',
+    key: 'size',
+    width: 110,
+    render: (row) => h('span', { class: 'muted' }, formatBytes(row.size)),
+  },
+  {
+    title: 'Source',
+    key: 'sourceLabel',
+    width: 150,
+    render: (row) => h('span', { class: 'muted' }, row.sourceLabel || '—'),
+  },
+  {
+    title: 'Status',
+    key: 'backedUp',
+    width: 130,
+    render: (row) =>
+      h(
+        NTag,
+        { size: 'small', type: row.backedUp ? 'success' : 'warning', bordered: false },
+        { default: () => (row.backedUp ? 'Backed up' : 'Not backed up') },
+      ),
+  },
+  {
+    title: 'Backed up to',
+    key: 'backups',
+    width: 200,
+    render: (row) =>
+      row.backups.length
+        ? h(
+          NSpace,
+          { size: 4 },
+          {
+            default: () =>
+              row.backups.map((b) =>
+                h(NTag, { key: b.driveId, size: 'small', bordered: false }, { default: () => b.label }),
+              ),
+          },
+        )
+        : h('span', { class: 'muted' }, '—'),
+  },
+  {
+    title: 'Last backup',
+    key: 'lastCopiedAt',
+    width: 180,
+    render: (row) => h('span', { class: 'muted' }, formatTime(row.lastCopiedAt)),
+  },
+  {
+    title: 'Actions',
+    key: 'actions',
+    width: 130,
+    align: 'right',
+    render: (row) =>
+      h(
+        NDropdown,
+        { trigger: 'click', options: destOptions.value, onSelect: (k) => backupItem(row, k) },
+        {
+          default: () =>
+            h(
+              NButton,
+              { size: 'small', type: 'primary', disabled: !row.sourceDriveId },
+              { default: () => 'Back up ▾' },
+            ),
+        },
+      ),
+  },
+])
+
+// Column defs for the destinations table.
+const destColumns = [
+  { title: 'Drive', key: 'label', minWidth: 160 },
+  {
+    title: 'Status',
+    key: 'online',
+    width: 110,
+    render: (row) =>
+      h(
+        NTag,
+        { size: 'small', type: row.online ? 'success' : 'default', bordered: false },
+        { default: () => (row.online ? 'online' : 'offline') },
+      ),
+  },
+  { title: 'Files stored', key: 'files', width: 120 },
+  {
+    title: 'Data stored',
+    key: 'bytes',
+    width: 120,
+    render: (row) => h('span', { class: 'muted' }, formatBytes(row.bytes)),
+  },
+  {
+    title: 'Capacity',
+    key: 'capacity',
+    width: 260,
+    render: (row) =>
+      row.capacityBytes
+        ? h('div', null, [
+          h(NProgress, {
+            type: 'line',
+            percentage: usedPercent(row.freeBytes, row.capacityBytes),
+            height: 8,
+            showIndicator: false,
+          }),
+          h(
+            'span',
+            { class: 'muted mono' },
+            `${formatBytes(row.freeBytes)} free / ${formatBytes(row.capacityBytes)}`,
+          ),
+        ])
+        : h('span', { class: 'muted' }, '—'),
+  },
+]
+
 watch([sourceFilter, statusFilter], () => {
   page.value = 1
   loadMedia()
@@ -218,64 +340,31 @@ onMounted(() => {
         </n-grid>
 
         <n-card>
-          <n-space align="center" style="margin-bottom: 12px" :wrap="true">
-            <n-select v-model:value="sourceFilter" :options="sourceOptions" style="width: 200px" placeholder="Source" />
-            <n-select v-model:value="statusFilter" :options="statusOptions" style="width: 170px" placeholder="Status" />
-            <n-input v-model:value="search" placeholder="Search path…" clearable style="width: 260px"
-              @keyup.enter="(page = 1), loadMedia()" />
-            <n-button @click="(page = 1), loadMedia()">Search</n-button>
-          </n-space>
+          <n-grid :cols="24" :x-gap="12" :y-gap="12" responsive="screen" item-responsive style="margin-bottom: 12px">
+            <n-gi span="24 s:12 l:6">
+              <n-select v-model:value="sourceFilter" :options="sourceOptions" placeholder="Source" />
+            </n-gi>
+            <n-gi span="24 s:12 l:6">
+              <n-select v-model:value="statusFilter" :options="statusOptions" placeholder="Status" />
+            </n-gi>
+            <n-gi span="24 s:18 l:8">
+              <n-input v-model:value="search" placeholder="Search path…" clearable
+                @keyup.enter="(page = 1), loadMedia()" />
+            </n-gi>
+            <n-gi span="24 s:6 l:4">
+              <n-button block @click="(page = 1), loadMedia()">Search</n-button>
+            </n-gi>
+          </n-grid>
 
-          <n-spin :show="loadingMedia">
-            <n-empty
-              v-if="!media.items.length"
-              :description="
-                filtersActive
-                  ? 'No media matches your filters.'
-                  : 'No media tracked yet — add a source on the Drives page, then run Scan sources.'
-              "
-            />
-            <n-table v-else :bordered="false" :single-line="false">
-              <thead>
-                <tr>
-                  <th>Path</th>
-                  <th style="width: 100px">Size</th>
-                  <th style="width: 140px">Source</th>
-                  <th style="width: 110px">Status</th>
-                  <th>Backed up to</th>
-                  <th style="width: 170px">Last backup</th>
-                  <th style="width: 120px; text-align: right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="m in media.items" :key="m.id">
-                  <td class="mono">{{ m.relPath }}</td>
-                  <td class="muted">{{ formatBytes(m.size) }}</td>
-                  <td class="muted">{{ m.sourceLabel || '—' }}</td>
-                  <td>
-                    <n-tag size="small" :type="m.backedUp ? 'success' : 'warning'" :bordered="false">
-                      {{ m.backedUp ? 'Backed up' : 'Not backed up' }}
-                    </n-tag>
-                  </td>
-                  <td>
-                    <n-space v-if="m.backups.length" :size="4">
-                      <n-tag v-for="b in m.backups" :key="b.driveId" size="small" :bordered="false">{{ b.label
-                      }}</n-tag>
-                    </n-space>
-                    <span v-else class="muted">—</span>
-                  </td>
-                  <td class="muted">{{ formatTime(m.lastCopiedAt) }}</td>
-                  <td>
-                    <div style="text-align: right">
-                      <n-dropdown trigger="click" :options="destOptions" @select="(k) => backupItem(m, k)">
-                        <n-button size="small" type="primary" :disabled="!m.sourceDriveId">Back up ▾</n-button>
-                      </n-dropdown>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </n-table>
-          </n-spin>
+          <n-data-table :columns="mediaColumns" :data="media.items" :row-key="(row) => row.id" :loading="loadingMedia"
+            :bordered="false" :single-line="false" :scroll-x="1220" :pagination="false">
+            <template #empty>
+              <n-empty :description="filtersActive
+                ? 'No media matches your filters.'
+                : 'No media tracked yet — add a source on the Drives page, then run Scan sources.'
+                " />
+            </template>
+          </n-data-table>
 
           <n-space justify="space-between" align="center" style="margin-top: 12px">
             <span class="muted">{{ media.total }} file(s)</span>
@@ -287,39 +376,12 @@ onMounted(() => {
       <!-- ============ DESTINATIONS ============ -->
       <n-tab-pane name="destinations" tab="Destination drives">
         <n-card>
-          <n-empty v-if="!stats?.destinations.length" description="No destination drives registered yet." />
-          <n-table v-else :bordered="false" :single-line="false">
-            <thead>
-              <tr>
-                <th>Drive</th>
-                <th style="width: 110px">Status</th>
-                <th style="width: 120px">Files stored</th>
-                <th style="width: 120px">Data stored</th>
-                <th style="width: 240px">Capacity</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="d in stats.destinations" :key="d.driveId">
-                <td>{{ d.label }}</td>
-                <td>
-                  <n-tag size="small" :type="d.online ? 'success' : 'default'" :bordered="false">
-                    {{ d.online ? 'online' : 'offline' }}
-                  </n-tag>
-                </td>
-                <td>{{ d.files }}</td>
-                <td class="muted">{{ formatBytes(d.bytes) }}</td>
-                <td>
-                  <template v-if="d.capacityBytes">
-                    <n-progress type="line" :percentage="usedPercent(d.freeBytes, d.capacityBytes)" :height="8"
-                      :show-indicator="false" />
-                    <span class="muted mono">{{ formatBytes(d.freeBytes) }} free / {{ formatBytes(d.capacityBytes)
-                    }}</span>
-                  </template>
-                  <span v-else class="muted">—</span>
-                </td>
-              </tr>
-            </tbody>
-          </n-table>
+          <n-data-table :columns="destColumns" :data="stats?.destinations || []" :row-key="(row) => row.driveId"
+            :bordered="false" :single-line="false" :scroll-x="770">
+            <template #empty>
+              <n-empty description="No destination drives registered yet." />
+            </template>
+          </n-data-table>
         </n-card>
       </n-tab-pane>
     </n-tabs>

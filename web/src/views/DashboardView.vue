@@ -117,7 +117,7 @@ onMounted(load)
       </n-gi>
     </n-grid>
 
-    <n-card title="Getting started" style="margin-top: 16px">
+    <n-card title="Getting started" style="margin-top: 16px" class="getting-started">
       <n-tabs type="segment" animated>
         <n-tab-pane name="setup" tab="Set up backups">
           <ol class="steps">
@@ -184,5 +184,31 @@ onMounted(load)
 .step-desc {
   font-size: 13px;
   line-height: 1.45;
+}
+
+/* On phones the two segment tabs ("Set up backups" / "Import an existing drive")
+   are too wide to sit side by side, so stack them full-width. The segment's
+   sliding capsule is positioned with a horizontal transform that no longer maps
+   to a vertical layout, so we hide it and highlight the active tab directly. */
+@media (max-width: 640px) {
+  .getting-started :deep(.n-tabs--segment-type .n-tabs-rail) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .getting-started :deep(.n-tabs--segment-type .n-tabs-tab-wrapper) {
+    flex-grow: 0;
+    flex-basis: auto;
+  }
+
+  .getting-started :deep(.n-tabs--segment-type .n-tabs-capsule) {
+    display: none;
+  }
+
+  .getting-started :deep(.n-tabs--segment-type .n-tabs-tab--active) {
+    background-color: var(--n-tab-color-segment);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08);
+  }
 }
 </style>
